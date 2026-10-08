@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Godot 4.3 and the Windows export templates
         run: |
@@ -40,7 +40,7 @@ jobs:
           ./godot --headless --path . --export-release "Windows Desktop" "build/LOTR Battle Empires.exe"
           cd build && zip -9 LOTR-Battle-Empires-windows.zip "LOTR Battle Empires.exe"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: LOTR-Battle-Empires-windows
           path: build/LOTR-Battle-Empires-windows.zip

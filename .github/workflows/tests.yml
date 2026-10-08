@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Godot 4.3
         run: |
@@ -24,19 +24,35 @@ jobs:
           ./godot --headless --path . --import || true
           ./godot --headless --path . --import
 
+      # Godot prints thousands of harmless shutdown messages in headless mode, so each step keeps the
+      # full output in test.log (uploaded if anything fails) and shows only the test report lines.
       - name: Bot match (team)
-        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6
+        shell: bash -o pipefail {0}
+        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
 
       - name: Bot match (free-for-all)
-        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6 --preset=ffa
+        shell: bash -o pipefail {0}
+        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6 --preset=ffa 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
 
       - name: Rules
-        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/RulesTest.tscn
+        shell: bash -o pipefail {0}
+        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/RulesTest.tscn 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
 
       - name: LAN host and client
+        shell: bash -o pipefail {0}
         run: |
           ./godot --headless --path . res://tests/auto/LanTest.tscn -- --role=host --seconds=30 > host.log 2>&1 &
           HOST=$!
-          ./godot --headless --path . res://tests/auto/LanTest.tscn -- --role=client --seconds=30
+          ./godot --headless --path . res://tests/auto/LanTest.tscn -- --role=client --seconds=30 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
           wait $HOST
-          grep "RESULT: PASS" host.log
+          grep -E "^\[host\]" host.log
+          grep -q "RESULT: PASS" host.log
+
+      - name: Upload full logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-logs
+          path: |
+            test.log
+            host.log

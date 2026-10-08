@@ -42,6 +42,7 @@ func _enter_tree():
 
 func _ready():
 	GameData.reset_clock()
+	seed(int(match_settings.get("seed", 0)))
 	lanes = map.get_meta("lanes")
 	_setup_subsystems_dependent_on_map()
 	_squads_root = Node.new()

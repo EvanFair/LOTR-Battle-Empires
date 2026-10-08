@@ -25,7 +25,8 @@ var _match = null
 
 func _ready():
 	_match = get_parent()
-	_rng.seed = hash(player.slot_index * 7919 + int(Time.get_ticks_usec()))
+	# seeded from the match so a given match (and every test run) plays out the same way
+	_rng.seed = hash(int(_match.match_settings.get("seed", 0)) * 31 + player.slot_index)
 
 
 func _physics_process(delta):
