@@ -98,9 +98,9 @@ func _handle_key(event: InputEventKey):
 		KEY_B:
 			_match.hud.toggle_build_menu()
 		KEY_ESCAPE:
-			if mode != "":
-				cancel_mode()
-				get_viewport().set_input_as_handled()
+			if mode == "":
+				return  # let the match menu have it
+			cancel_mode()
 		_:
 			return
 	get_viewport().set_input_as_handled()

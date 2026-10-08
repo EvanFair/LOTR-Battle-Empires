@@ -44,6 +44,10 @@ func _ready():
 	GameData.reset_clock()
 	seed(int(match_settings.get("seed", 0)))
 	lanes = map.get_meta("lanes")
+	# the navigation meshes are resources shared by every Match instance; give this match its
+	# own copies, or a second match in the same session starts from the first one's bake
+	for region in navigation.find_children("*", "NavigationRegion3D", true, false):
+		region.navigation_mesh = region.navigation_mesh.duplicate()
 	_setup_subsystems_dependent_on_map()
 	_squads_root = Node.new()
 	_squads_root.name = "Squadrons"
