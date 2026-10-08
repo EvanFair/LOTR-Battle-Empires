@@ -15,7 +15,7 @@ Up to 4 players over LAN or against bots. Teams like Age of Empires: 2v2, 3v1 or
 3. Windows SmartScreen may say "Windows protected your PC", because the game isn't code-signed. Click **More info → Run anyway**.
 4. The first time you host a LAN game, Windows Firewall asks for network access. Allow it on **Private networks**, or friends won't be able to join.
 
-Every push to `main` also builds a fresh `.exe` (Actions tab → latest "Build Windows" run → Artifacts). Pushing a tag like `v0.2.0` publishes a new Release.
+Every push to `main` builds a fresh `.exe` and publishes it as a new Release automatically (`.github/workflows/build.yml`).
 
 ## Play it from the source code
 

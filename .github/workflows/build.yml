@@ -1,12 +1,12 @@
 name: Build Windows
 
-# Every push to main builds the Windows .exe and attaches it to the run (Actions tab -> run -> Artifacts).
-# Pushing a tag like v0.1.0 also publishes it as a GitHub Release with a permanent download link.
+# Every push to main builds the Windows .exe and publishes it as a numbered GitHub Release
+# (v0.1.<run number>), so https://github.com/EvanFair/LOTR-Battle-Empires/releases/latest is always
+# the newest build. The release action creates the tag on GitHub's side.
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -46,9 +46,12 @@ jobs:
           path: build/LOTR-Battle-Empires-windows.zip
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: LOTR Battle Empires v0.1.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: build/LOTR-Battle-Empires-windows.zip
           body: |
             Windows build of LOTR Battle Empires. Unzip and double-click `LOTR Battle Empires.exe`.
