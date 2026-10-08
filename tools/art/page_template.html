@@ -1,0 +1,235 @@
+<title>Battle Empires Art Bible</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Alegreya+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a war-room ledger. Left rail of chapters, right column of prompt cards. */
+:root {
+  --bg: #eceeea; --panel: #f8f9f6; --ink: #1d2126; --muted: #5b6370; --line: #cfd4cc;
+  --gold: #8a6a1c; --gold-soft: #e9dfc4; --ok: #2f7a4a; --chip: #e2e6df;
+  --display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121418; --panel: #1b1e24; --ink: #e7e4dc; --muted: #9aa1ab; --line: #2d323a;
+  --gold: #d9b65e; --gold-soft: #2c2716; --ok: #6cc28a; --chip: #262a31; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121418; --panel: #1b1e24; --ink: #e7e4dc; --muted: #9aa1ab; --line: #2d323a;
+  --gold: #d9b65e; --gold-soft: #2c2716; --ok: #6cc28a; --chip: #262a31; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--body); padding-inline: 16px; padding-block: 0 64px }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 32px }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr) } nav.rail { position: static !important; max-height: none !important } }
+header { max-width: 1180px; margin: 0 auto; padding-block: 36px 20px; display: grid; gap: 14px }
+h1 { font: 700 clamp(28px, 4.4vw, 44px)/1.1 var(--display); letter-spacing: .02em; margin: 0; text-wrap: balance }
+h2 { font: 700 22px/1.25 var(--display); letter-spacing: .02em; margin: 0 0 6px; text-wrap: balance }
+h3 { font: 600 17px/1.3 var(--body); margin: 0 }
+.lede { max-width: 68ch; color: var(--muted); margin: 0 }
+.steps { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 0; padding: 0; list-style: none; counter-reset: s }
+.steps li { counter-increment: s; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; flex: 1 1 210px; min-width: 0; font-size: 14.5px }
+.steps li::before { content: counter(s); font: 700 13px var(--display); color: var(--gold); margin-right: 8px }
+nav.rail { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; max-height: 100vh; overflow-y: auto; padding-block: 12px }
+nav.rail a { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); text-decoration: none; font-size: 14px; padding: 5px 8px; border-radius: 4px }
+nav.rail a:hover, nav.rail a:focus-visible { color: var(--ink); background: var(--chip); outline: none }
+nav.rail .n { font: 500 12px var(--mono); font-variant-numeric: tabular-nums }
+nav.rail .group { font: 600 11px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--gold); margin: 14px 8px 4px }
+.progress { font: 500 13px var(--mono); color: var(--muted); padding: 0 8px 8px }
+.bar { height: 4px; background: var(--chip); border-radius: 2px; margin: 4px 8px 0; overflow: hidden }
+.bar i { display: block; height: 100%; background: var(--ok); width: 0 }
+main { min-width: 0; display: grid; gap: 40px; padding-block: 12px }
+section { display: grid; gap: 14px; scroll-margin-top: 16px }
+.intro { color: var(--muted); max-width: 70ch; margin: 0 }
+.tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+input[type=search] { flex: 1 1 260px; min-width: 0; font: 15px var(--body); padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink) }
+button { font: 600 13px var(--body); border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 6px 12px; border-radius: 5px; cursor: pointer }
+button:hover { border-color: var(--gold) }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+button.primary { background: var(--gold); border-color: var(--gold); color: var(--bg) }
+.cards { display: grid; gap: 12px }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0 }
+.card.done { opacity: .55 }
+.card-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center }
+.card-head h3 { flex: 1 1 220px; min-width: 0 }
+.chip { font: 500 12px var(--mono); background: var(--chip); border-radius: 4px; padding: 2px 7px; white-space: nowrap; color: var(--muted) }
+.chip.style { color: var(--gold); background: var(--gold-soft) }
+.file { font: 500 13px var(--mono); color: var(--ink); user-select: all; overflow-wrap: anywhere }
+label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer }
+pre { margin: 0; font: 13px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; max-height: 4.8em; overflow: hidden; position: relative }
+pre.open { max-height: none }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.copied { color: var(--ok); font-size: 13px }
+.palette { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px }
+.fac { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 10px; min-width: 0 }
+.sw { display: flex; gap: 6px } .sw span { flex: 1; height: 30px; border-radius: 4px; border: 1px solid var(--line) }
+.fac p { margin: 0; font-size: 14px; color: var(--muted) }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none }
+.rules li { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 14.5px; min-width: 0 }
+.rules b { display: block; font: 700 13px var(--display); letter-spacing: .04em; color: var(--gold); margin-bottom: 4px }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel) }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 760px }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font: 600 12px var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--chip) }
+td code { font: 12px var(--mono); color: var(--muted) }
+.subject { margin: 0; max-width: 75ch; font-size: 15px }
+.empty { color: var(--muted); font-style: italic }
+@media (prefers-reduced-motion: no-preference) { .card { transition: opacity .2s } }
+</style>
+
+<header>
+  <h1>Battle Empires Art Bible</h1>
+  <p class="lede">Low-poly Middle-earth with big-MOBA readability. Everything below is ready to paste into Nano Banana 2: the art direction, the 12 style blocks, the characters to find as 3D models, and <b id="total"></b> image prompts, each with the file name to save it as.</p>
+  <ol class="steps">
+    <li>Make the six style boards in Step 0 and keep the best of each.</li>
+    <li>Attach <code>board_world.png</code> and the faction board as reference images to every other prompt.</li>
+    <li>Save each image with the file name shown on its card.</li>
+    <li>Send me the files (a zip per section is fine). I wire them into the game.</li>
+  </ol>
+</header>
+
+<div class="wrap">
+  <nav class="rail" aria-label="Chapters">
+    <div class="progress"><span id="doneCount">0</span> of <span id="total2"></span> made<div class="bar"><i id="barFill"></i></div></div>
+    <div class="group">Direction</div>
+    <a href="#direction">Art direction</a>
+    <a href="#styles">Style blocks <span class="n">12</span></a>
+    <a href="#characters">Characters to find <span class="n" id="charN"></span></a>
+    <div class="group">Prompts</div>
+    <div id="navPrompts"></div>
+  </nav>
+
+  <main>
+    <section id="direction">
+      <h2>Art direction</h2>
+      <p class="intro">The target is the low-poly look of your reference images (adult proportions, faceted flat-shaded meshes, solid colours), dressed for a League of Legends style top-down camera.</p>
+      <ul class="rules">
+        <li><b>Shape</b>Faceted low-poly, flat-shaded, visible facets. Heroic, slightly exaggerated proportions: broad shoulders, big hands and feet. Adults, never chibi.</li>
+        <li><b>Colour</b>Muted earthy base, one strong faction accent. No photo textures or noise. Characters sit one step brighter than the ground so they pop.</li>
+        <li><b>Light</b>Warm key light, cool shadows, soft ambient occlusion, light fog in the distance.</li>
+        <li><b>Camera</b>Top-down MOBA camera at about 55°. Silhouettes, weapons and banners are oversized so they read from up there.</li>
+        <li><b>Team colour</b>Faction colours carry identity. A small team-colour band (cape trim, banner, base ring) shows the player, since two players can pick the same faction.</li>
+        <li><b>3D budget</b>Troops 3–5k triangles, heroes 8–12k, buildings 2–6k. One texture atlas per model. Rigged humanoids in glTF/GLB, Y-up, about 1.8 m tall.</li>
+        <li><b>Originality</b>Inspired by Tolkien's books. No character should resemble a film actor, so prompts say so.</li>
+        <li><b>2D icons</b>Same low-poly look, rendered as a single subject on a dark ground. Ability icons must read at 64 px, emblems at 32 px.</li>
+      </ul>
+      <div class="palette" id="palette"></div>
+    </section>
+
+    <section id="styles">
+      <h2>Style blocks</h2>
+      <p class="intro">Each prompt below already starts with its style block, so you never need to combine them by hand. They are listed here so you can see what each style means and reuse one for new assets.</p>
+      <div class="cards" id="styleCards"></div>
+    </section>
+
+    <section id="characters">
+      <h2>Characters to find</h2>
+      <p class="intro">Every character model the four launch factions need, with the animations the game plays. Riders are separate from their mounts. Siege machines animate in code, so they need no rig.</p>
+      <div class="tablewrap"><table><thead><tr><th>Model</th><th>Faction</th><th>Role</th><th>Animations needed</th><th>Triangles</th></tr></thead><tbody id="charRows"></tbody></table></div>
+    </section>
+
+    <div class="tools" id="tools">
+      <label class="check" for="q" style="display:none">Search</label>
+      <input type="search" id="q" placeholder="Filter prompts: hero, building, Rohan, icon…" aria-label="Filter prompts">
+      <label class="check"><input type="checkbox" id="hideDone"> Hide made</label>
+    </div>
+    <div id="sections"></div>
+  </main>
+</div>
+
+<script type="application/json" id="data">__DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const SW = {
+  gondor: ['#f2f1ec', '#b9c0c8', '#22324f', '#121417', '#3b6fb6'],
+  rohan: ['#c9973f', '#e6c35c', '#3f6b32', '#6b4a2b', '#e9e1c8'],
+  mordor: ['#17151a', '#4a3a36', '#7d1f17', '#e2562a', '#8c8a84'],
+  isengard: ['#16171a', '#3d4046', '#5d4a3c', '#f4f4f2', '#e2802a'],
+  wild: ['#4f6b3a', '#7c8a5c', '#d8d2bf', '#6f6a78', '#a4c45a'],
+};
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k) || '{}') } catch (e) { return {} } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch (e) {} } };
+let done = store.get('art-done');
+const total = D.sections.reduce((n, s) => n + s.items.length, 0);
+document.getElementById('total').textContent = total;
+document.getElementById('total2').textContent = total;
+document.getElementById('charN').textContent = D.characters.length;
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else e.setAttribute(k, v) }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+}
+async function copy(text, btn) {
+  const label = btn.textContent;
+  try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; }
+  catch (e) {
+    const pre = btn.closest('.card')?.querySelector('pre');
+    if (pre) { pre.classList.add('open'); const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    btn.textContent = 'Selected: press Ctrl+C';
+  }
+  setTimeout(() => btn.textContent = label, 1600);
+}
+
+// palette
+const pal = document.getElementById('palette');
+for (const f of D.factions) {
+  const sw = el('div', { class: 'sw' }); (SW[f.id] || []).forEach(c => { const s = el('span', { title: c }); s.style.background = c; sw.append(s) });
+  pal.append(el('div', { class: 'fac' }, el('h3', { text: f.name }), sw, el('p', { text: f.look.replace(/^[^:]+: /, '') })));
+}
+// style blocks
+const sc = document.getElementById('styleCards');
+for (const s of D.styles) {
+  const pre = el('pre', { text: s.text });
+  const b = el('button', { type: 'button', text: 'Copy style' }); b.onclick = () => copy(s.text, b);
+  const more = el('button', { type: 'button', text: 'Show all' }); more.onclick = () => { pre.classList.toggle('open'); more.textContent = pre.classList.contains('open') ? 'Show less' : 'Show all' };
+  sc.append(el('div', { class: 'card' }, el('div', { class: 'card-head' }, el('h3', { text: s.name })), el('p', { class: 'intro', text: s.use }), pre, el('div', { class: 'row' }, b, more)));
+}
+// characters
+const rows = document.getElementById('charRows');
+for (const c of D.characters) rows.append(el('tr', {}, el('td', {}, el('b', { text: c.name }), el('br'), el('code', { text: c.id })), el('td', { text: c.faction }), el('td', { text: c.role }), el('td', { text: c.anims }), el('td', { text: c.tris })));
+
+// prompt sections
+const host = document.getElementById('sections'), nav = document.getElementById('navPrompts');
+const cards = [];
+D.sections.forEach(sec => {
+  const list = el('div', { class: 'cards' });
+  const allBtn = el('button', { type: 'button', class: 'primary', text: `Copy all ${sec.items.length} prompts` });
+  allBtn.onclick = () => copy(sec.items.map(i => `### ${i.title}  (save as ${i.file})\n\n${i.prompt}`).join('\n\n----------\n\n'), allBtn);
+  const s = el('section', { id: sec.id }, el('h2', { text: sec.title }), el('p', { class: 'intro', text: sec.intro }), el('div', { class: 'row' }, allBtn), list);
+  sec.items.forEach(it => {
+    const pre = el('pre', { text: it.prompt });
+    const cb = el('input', { type: 'checkbox', id: 'd-' + it.id }); cb.checked = !!done[it.id];
+    const card = el('article', { class: 'card' + (cb.checked ? ' done' : '') });
+    cb.onchange = () => { done[it.id] = cb.checked; if (!cb.checked) delete done[it.id]; store.set('art-done', done); card.classList.toggle('done', cb.checked); refresh() };
+    const b = el('button', { type: 'button', text: 'Copy prompt' }); b.onclick = () => copy(it.prompt, b);
+    const fb = el('button', { type: 'button', text: 'Copy file name' }); fb.onclick = () => copy(it.file, fb);
+    const more = el('button', { type: 'button', text: 'Show all' }); more.onclick = () => { pre.classList.toggle('open'); more.textContent = pre.classList.contains('open') ? 'Show less' : 'Show all' };
+    card.append(el('div', { class: 'card-head' }, el('h3', { text: it.title }), el('span', { class: 'chip style', text: it.style }), el('label', { class: 'check', for: 'd-' + it.id }, cb, 'Made')),
+      el('div', { class: 'row' }, el('span', { class: 'chip', text: 'save as' }), el('span', { class: 'file', text: it.file })),
+      el('p', { class: 'subject', text: it.prompt.split('Subject: ')[1].split('\nFaction look:')[0] }),
+      pre, el('div', { class: 'row' }, b, fb, more));
+    card.dataset.search = (it.title + ' ' + it.file + ' ' + sec.title + ' ' + it.prompt.split('Subject: ')[1]).toLowerCase();
+    card.dataset.id = it.id;
+    cards.push(card); list.append(card);
+  });
+  const navLink = el('a', { href: '#' + sec.id }, sec.title.replace(/\s*\(\d+\)$/, '').replace(/^Step 0 · /, ''), el('span', { class: 'n', text: sec.items.length }));
+  nav.append(navLink);
+  host.append(s);
+});
+function refresh() {
+  const n = Object.keys(done).length;
+  document.getElementById('doneCount').textContent = n;
+  document.getElementById('barFill').style.width = (100 * n / total) + '%';
+  filter();
+}
+function filter() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const hide = document.getElementById('hideDone').checked;
+  for (const c of cards) c.hidden = (q && !q.split(/\s+/).every(w => c.dataset.search.includes(w))) || (hide && done[c.dataset.id]);
+  for (const s of host.querySelectorAll('section')) s.hidden = ![...s.querySelectorAll('.card')].some(c => !c.hidden);
+}
+document.getElementById('q').addEventListener('input', filter);
+document.getElementById('hideDone').addEventListener('change', filter);
+refresh();
+</script>
