@@ -42,6 +42,18 @@ func play_attack():
 	_attack_ends = GameData.now() + length / speed
 
 
+func play_cast():
+	play_once("Spellcast_Shoot" if anim_set == "cast" else "Spellcast_Raise")
+
+
+func play_once(anim_name: String, speed = 1.3):
+	if player == null or locked or not player.has_animation(anim_name):
+		return
+	player.play(anim_name, BLEND, speed)
+	_current = anim_name
+	_attack_ends = GameData.now() + player.get_animation(anim_name).length / speed
+
+
 func _process(delta):
 	if player == null or locked or not is_instance_valid(_unit) or delta <= 0.0:
 		return

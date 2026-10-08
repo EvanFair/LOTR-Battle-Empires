@@ -101,6 +101,21 @@ static func lane_points_from(lane: Dictionary, spawn_index: int) -> Array:
 	return points
 
 
+static func camp_sites() -> Array:
+	"""Jungle camps: two in each wedge of land between the lanes, plus the Cave Troll's lair in
+	the middle where the two diagonal lanes cross."""
+	var c = SIZE / 2.0
+	var sites = [{"camp": "troll", "pos": Vector3(c, 0, c)}]
+	var wedges = [Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0)]
+	for i in range(wedges.size()):
+		var out = wedges[i]
+		var side = Vector3(-out.z, 0, out.x)
+		var base = Vector3(c, 0, c) + out * SIZE * 0.3
+		sites.append({"camp": "spiders" if i % 2 == 0 else "wargs", "pos": base + side * 13.0})
+		sites.append({"camp": "wargs" if i % 2 == 0 else "spiders", "pos": base - side * 13.0})
+	return sites
+
+
 static func lanes_for(spawn_index: int) -> Array:
 	return build_lanes().filter(func(l): return l.a == spawn_index or l.b == spawn_index)
 
@@ -234,6 +249,8 @@ static func _place_decorations(map, rng, spawns, lanes):
 		if _distance_to_lanes(p, lanes) < LANE_CLEARANCE + width * 0.5 + 1.0:
 			continue
 		if spawns.any(func(sp): return sp.distance_to(p) < GameData.BASE_RADIUS + 3.0):
+			continue
+		if camp_sites().any(func(c): return c.pos.distance_to(p) < 6.0 + width * 0.5):
 			continue
 		var prop = Art.prop(pick[0], width, HILL_TINT if pick[0].begins_with("hills") else Color(1, 1, 1))
 		prop.position = p

@@ -38,7 +38,8 @@ jobs:
         run: |
           mkdir -p build
           ./godot --headless --path . --export-release "Windows Desktop" "build/LOTR Battle Empires.exe"
-          cd build && zip -9 LOTR-Battle-Empires-windows.zip "LOTR Battle Empires.exe"
+          cp CREDITS.txt build/
+          cd build && zip -9 LOTR-Battle-Empires-windows.zip "LOTR Battle Empires.exe" CREDITS.txt
 
       - uses: actions/upload-artifact@v6
         with:

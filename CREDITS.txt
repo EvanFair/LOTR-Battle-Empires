@@ -1,0 +1,27 @@
+LOTR Battle Empires - credits
+Personal fan project, not affiliated with the Tolkien Estate, Middle-earth Enterprises or Warner Bros.
+
+3D ART
+  KayKit Adventurers, Skeletons and Medieval Hexagon packs by Kay Lousberg (CC0)
+  https://kaylousberg.com
+
+SKILL ICONS (assets/omoba/skills)
+  Open Moba contributors - https://github.com/o-moba/omoba-bevy
+  Licensed CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/). Not modified.
+
+ITEM AND HUD ICONS (assets/omoba/icons)
+  game-icons.net artists (Delapouite, Lorc and others), via Open MOBA
+  Licensed CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/).
+  Per-icon credits: assets/omoba/icons/LICENSES.md in the source repository.
+
+MUSIC AND SOUND EFFECTS
+  "Exploration Theme" by Cleyton Kauffman (CC0) - https://soundcloud.com/cleytonkauffman
+  RPG Audio by Kenney (CC0) - https://kenney.nl
+  Synthesized effects by Open MOBA contributors (CC0)
+  Horn, war drums, sword clash, boulder, blast and building sounds synthesized for this game (CC0)
+
+CODE
+  Built on lampe-games/godot-open-rts (MIT) - https://github.com/lampe-games/godot-open-rts
+  Made with the Godot Engine (MIT) - https://godotengine.org
+
+Source code: https://github.com/EvanFair/LOTR-Battle-Empires

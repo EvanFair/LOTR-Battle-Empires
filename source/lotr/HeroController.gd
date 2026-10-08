@@ -1,13 +1,16 @@
 extends Node
 ## Local player input. Turns mouse and keyboard into Commands; never changes game state itself.
-##   Right-click ground / enemy ... move / attack
-##   Q W E R ...................... abilities (quick-cast at the cursor or hovered enemy)
+## See docs/CONTROLS.md for why the scheme looks like this.
+##   Right-click ground / enemy ... move / attack (green / red marker)
+##   A then left-click ............ attack-move (fight anything met on the way)
+##   S / H ........................ stop / hold position
+##   Q W E R ...................... abilities: hold to see range and aim, release to cast
 ##   Tab .......................... cycle squadrons within command range
 ##   1 2 3 4 ...................... squadron: Attack (click enemy) / Defend (click point) / Hold / Return
-##   B ............................ build menu (then left-click to place, right-click/Esc to cancel)
+##   B ............................ in base: base panel; outside: Recall (6s channel)
+##   Alt + left-click ............. ping for your team (Alt+Shift: danger)
 ##   Left-click house/villager .... resource bubbles
 ##   Y / Space .................... camera lock toggle / snap to hero
-##   S ............................ stop
 
 signal selected_squad_changed(squad_id)
 signal mode_changed(mode)
@@ -16,17 +19,26 @@ const UNIT_LAYER = 2
 
 var camera_locked = true
 var selected_squad = 0
-var mode = ""  # "", "squad_attack", "squad_defend", "place"
+var mode = ""  # "", "squad_attack", "squad_defend", "place", "attack_move"
 var placing_building = ""
+
+var indicators = null
+var aiming = ""  # ability key being aimed (held)
 
 var _match = null
 var _camera = null
 var _ghost = null
 
+const IndicatorsScript = preload("res://source/lotr/hud/Indicators.gd")
+
 
 func _ready():
 	_match = get_parent()
 	_camera = _match.find_child("IsometricCamera3D")
+	MatchSignals.terrain_targeted.connect(_on_minimap_move)
+	indicators = IndicatorsScript.new()
+	indicators.name = "Indicators"
+	_match.add_child.call_deferred(indicators)
 
 
 func local_player():
@@ -54,6 +66,27 @@ func _process(_delta):
 			_ghost.global_position = point
 	if selected_squad != 0 and _squad_summary(selected_squad).is_empty():
 		_set_selected_squad(0)
+	_update_indicators(h)
+
+
+func _update_indicators(h):
+	if indicators == null or not indicators.is_inside_tree():
+		return
+	var alive = h != null and h.is_alive()
+	if alive and aiming != "" and h.ability(aiming) != null:
+		indicators.show_aim(h.global_position, HeroAbilities.aim(h.ability(aiming)), _mouse_ground())
+	elif alive and mode == "attack_move":
+		indicators.show_aim(h.global_position, {"mode": "self", "radius": h.attack_range + 0.5}, null)
+	else:
+		indicators.hide_aim()
+	if alive and (selected_squad != 0 or mode.begins_with("squad")):
+		indicators.show_command_ring(h.global_position)
+	else:
+		indicators.hide_command_ring()
+	if alive and h.recall_until > 0.0:
+		indicators.show_recall(h.global_position, h.recall_left() / h.RECALL_TIME)
+	else:
+		indicators.hide_recall()
 
 
 func set_camera_locked(value: bool):
@@ -63,6 +96,13 @@ func set_camera_locked(value: bool):
 # --- input ------------------------------------------------------------------------------------
 func _unhandled_input(event):
 	if _match.ended or local_player() == null:
+		return
+	if event is InputEventKey and not event.pressed and aiming != "" and mode != "cast":
+		if OS.get_keycode_string(event.physical_keycode) == aiming:
+			var key = aiming
+			aiming = ""
+			_cast(key)
+			get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event)
@@ -78,7 +118,17 @@ func _handle_key(event: InputEventKey):
 	var key = event.physical_keycode
 	match key:
 		KEY_Q, KEY_W, KEY_E, KEY_R:
-			_cast(OS.get_keycode_string(key))
+			if event.ctrl_pressed:
+				learn_ability(OS.get_keycode_string(key))
+			else:
+				_start_aim(OS.get_keycode_string(key))
+		KEY_5, KEY_6, KEY_7, KEY_8:
+			use_item(key - KEY_5)
+		KEY_A:
+			if hero() != null and hero().is_alive():
+				_start_mode("attack_move")
+		KEY_H:
+			_submit({"type": "hero_hold"})
 		KEY_TAB:
 			_cycle_squad()
 		KEY_1:
@@ -96,17 +146,30 @@ func _handle_key(event: InputEventKey):
 		KEY_S:
 			_submit({"type": "hero_stop"})
 		KEY_B:
-			_match.hud.toggle_build_menu()
+			if _match.hud.in_base() or _match.hud.base_panel_open():
+				_match.hud.toggle_build_menu()
+			else:
+				_submit({"type": "recall"})
 		KEY_ESCAPE:
-			if mode == "":
+			if aiming != "":
+				aiming = ""
+				if mode == "cast":
+					cancel_mode()
+			elif mode == "":
 				return  # let the match menu have it
-			cancel_mode()
+			else:
+				cancel_mode()
 		_:
 			return
 	get_viewport().set_input_as_handled()
 
 
 func _handle_right_click():
+	if aiming != "":
+		aiming = ""  # right-click cancels an aimed ability (MOBA convention)
+		if mode == "cast":
+			cancel_mode()
+		return
 	if mode != "":
 		cancel_mode()
 		return
@@ -115,15 +178,43 @@ func _handle_right_click():
 	if unit != null and h != null and h.is_enemy_of(unit):
 		_submit({"type": "hero_attack", "target": unit.net_id})
 		_flash(unit)
+		indicators.attack_marker(unit)
 		return
 	var point = _mouse_ground()
 	if point != null:
 		_submit({"type": "hero_move", "pos": point})
-		_match.hud.ping(point)
+		indicators.set_attack_target(null)
+		indicators.move_marker(point)
 
 
 func _handle_left_click():
+	if Input.is_key_pressed(KEY_ALT):
+		var p = _mouse_ground()
+		if p != null:
+			_submit({"type": "ping", "pos": p, "danger": Input.is_key_pressed(KEY_SHIFT)})
+		get_viewport().set_input_as_handled()
+		return
 	match mode:
+		"cast":
+			var key = aiming
+			aiming = ""
+			cancel_mode()
+			if key != "":
+				_cast(key)
+			get_viewport().set_input_as_handled()
+		"attack_move":
+			var unit = _unit_under_mouse()
+			if unit != null and hero() != null and hero().is_enemy_of(unit):
+				_submit({"type": "hero_attack", "target": unit.net_id})
+				indicators.attack_marker(unit)
+			else:
+				var point = _mouse_ground()
+				if point != null:
+					_submit({"type": "hero_attack_move", "pos": point})
+					indicators.set_attack_target(null)
+					indicators._shrinking_ring(point, indicators.ATTACK_COLOR, 1.1, 0.6)
+			cancel_mode()
+			get_viewport().set_input_as_handled()
 		"squad_attack":
 			var unit = _unit_under_mouse()
 			if unit != null and hero() != null and hero().is_enemy_of(unit):
@@ -157,7 +248,27 @@ func _handle_left_click():
 				_match.hud.show_building(unit)
 
 
+func _on_minimap_move(point):
+	# right-click on the minimap moves the hero there
+	if point == null or local_player() == null or _match.ended:
+		return
+	_submit({"type": "hero_move", "pos": point})
+	indicators.move_marker(point)
+
+
 # --- abilities --------------------------------------------------------------------------------
+func _start_aim(key: String):
+	var h = hero()
+	if h == null:
+		return
+	if h.ability(key) == null:
+		_match.toast.emit("%s has no %s ability yet" % [h.display_name, key])
+		return
+	if mode != "":
+		cancel_mode()
+	aiming = key  # indicator shows while the key is held; releasing casts
+
+
 func _cast(key: String):
 	var h = hero()
 	if h == null:
@@ -171,14 +282,33 @@ func _cast(key: String):
 	if point != null:
 		cmd["pos"] = point
 	var unit = _unit_under_mouse()
-	if ability.kind in ["execute_strike", "pin_shot"]:
+	if HeroAbilities.aim(ability).mode == "unit":
 		if unit == null or not h.is_enemy_of(unit):
 			unit = _closest_enemy_to_cursor(point, 3.0)
 		if unit == null:
 			_match.toast.emit("Hover over an enemy to use %s" % ability.name)
 			return
 		cmd["target"] = unit.net_id
+		indicators.attack_marker(unit)
 	_submit(cmd)
+
+
+func arm_ability(key: String):
+	_start_aim(key)
+	if aiming == key:
+		mode = "cast"
+		mode_changed.emit(mode)
+
+
+func use_item(slot: int):
+	var h = hero()
+	if h == null or slot >= h.items.size():
+		return
+	_submit({"type": "use_item", "slot": slot})
+
+
+func learn_ability(key: String):
+	_submit({"type": "learn", "key": key})
 
 
 func _closest_enemy_to_cursor(point, radius):

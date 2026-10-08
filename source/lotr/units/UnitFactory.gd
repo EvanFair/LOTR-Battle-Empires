@@ -14,6 +14,8 @@ const VillagerScript = preload("res://source/lotr/units/Villager.gd")
 const HeroScript = preload("res://source/lotr/units/Hero.gd")
 const BuildingScript = preload("res://source/lotr/units/Building.gd")
 const ResourceScript = preload("res://source/lotr/units/ResourceNode.gd")
+const CreatureScript = preload("res://source/lotr/units/Creature.gd")
+const CreatureAnimScript = preload("res://source/lotr/art/CreatureAnim.gd")
 const AnimDriverScript = preload("res://source/lotr/art/AnimDriver.gd")
 
 const SKIN = Color("e0b48c")
@@ -40,6 +42,8 @@ static func create(params: Dictionary) -> Node3D:
 			node = _create_building(params)
 		"resource":
 			node = _create_resource(params)
+		"creature":
+			node = _create_creature(params)
 		_:
 			push_error("unknown unit kind %s" % params.kind)
 			return null
@@ -58,14 +62,17 @@ static func _claim_ownership(root, node):
 
 # --- units ------------------------------------------------------------------------------------
 static func _create_troop(params):
-	var stats = GameData.troop_stats(params.faction, params["class"])
+	var stats = GameData.troop_stats(params.faction, params["class"], params.get("upgrades", {}))
 	if params.has("summon_name"):
 		stats["name"] = params.summon_name
 	var unit = _new_unit(TroopScript, params, stats)
 	unit.unit_kind = "troop"
-	unit.unit_class = params["class"]
-	unit.target_kind = params["class"] if params["class"] != "special" else "infantry"
+	unit.unit_class = stats.counter_as  # which column of the counter table it attacks with
+	unit.target_kind = stats.counter_as if stats.counter_as in GameData.TARGET_KINDS else "infantry"
 	unit.display_name = stats.name
+	unit.armor = stats.armor
+	unit.siege = stats.siege
+	unit.explode = stats.explode
 	var geometry = _geometry(unit)
 	var unit_class = params["class"]
 	var look = Art.unit_look(params.faction, unit_class)
@@ -76,15 +83,58 @@ static func _create_troop(params):
 		var anim = dead.get_meta("anim")
 		if anim.has_animation("Skeletons_Awaken_Standing"):
 			anim.play("Skeletons_Awaken_Standing")
+	elif Art.siege_kind(params.faction, unit_class) != "":
+		match Art.siege_kind(params.faction, unit_class):
+			"trebuchet":
+				_trebuchet(geometry)
+			"ram":
+				_ram(geometry, Color("2b2622"), false)
+			"grond":
+				_ram(geometry, Color("1c1716"), true)
 	elif unit_class == "heavy" and not Art.UNITS.get(params.faction, {}).has("heavy"):
 		_siege(geometry)
-	elif unit_class == "rider":
+	elif Art.is_mounted(params.faction, unit_class):
 		_mount(geometry, params.faction)
-		var rider = _character(unit, geometry, look[0], look[1], look[2], look[3], "rider")
+		var anim_set = "rider_ranged" if stats.ranged else "rider"
+		var rider = _character(unit, geometry, look[0], look[1], look[2], look[3], anim_set)
 		rider.position = Vector3(0, 0.62, 0.05)
 	else:
 		_character(unit, geometry, look[0], look[1], look[2], look[3], look[4])
-	_finish_mobile(unit, stats, 1.9 if unit_class != "heavy" else 3.4)
+	var bar = 1.9
+	if unit_class == "heavy" or Art.siege_kind(params.faction, unit_class) != "":
+		bar = 3.4 if Art.siege_kind(params.faction, unit_class) != "grond" else 4.2
+	_finish_mobile(unit, stats, bar)
+	return unit
+
+
+static func _create_creature(params):
+	var data = GameData.CREATURES[params.creature]
+	var stats = data.duplicate()
+	stats["ranged"] = false
+	var unit = _new_unit(CreatureScript, params, stats)
+	unit.unit_kind = "creature"
+	unit.unit_class = "infantry" if params.creature != "cave_troll" else "heavy"
+	unit.target_kind = unit.unit_class
+	unit.creature_key = params.creature
+	unit.display_name = data.name
+	unit.armor = data.get("armor", 0.0)
+	var geometry = _geometry(unit)
+	match params.creature:
+		"spider":
+			_spider(unit, geometry, Color(0.2, 0.17, 0.15), 1.0)
+		"warg":
+			var body = _mount(geometry, "mordor")
+			var anim = CreatureAnimScript.new()
+			anim.name = "CreatureAnim"
+			anim.body = body
+			unit.add_child(anim)
+		"cave_troll":
+			var troll = _character(unit, geometry, "Barbarian", ["2H_Axe"], Color(1, 1, 1), 2.7, "melee2h", ["Barbarian_Cape"])
+			# grey-green stony hide
+			Art.recolor(troll, {"Barbarian_Head": Color(0.48, 0.55, 0.45), "Barbarian_ArmLeft": Color(0.46, 0.53, 0.43),
+				"Barbarian_ArmRight": Color(0.46, 0.53, 0.43), "Barbarian_Body": Color(0.36, 0.33, 0.28),
+				"Barbarian_LegLeft": Color(0.34, 0.31, 0.27), "Barbarian_LegRight": Color(0.34, 0.31, 0.27)})
+	_finish_mobile(unit, stats, 2.0 if params.creature != "cave_troll" else 5.2)
 	return unit
 
 
@@ -130,7 +180,12 @@ static func _create_hero(params):
 	unit.display_name = data.name
 	var geometry = _geometry(unit)
 	var look = Art.HEROES.get(params.hero, Art.HEROES.aragorn)
-	_character(unit, geometry, look[0], look[1], look[2], look[3], look[4], look[5])
+	if look[0] == "spider":
+		_spider(unit, geometry, look[2], look[3])
+	else:
+		var model = _character(unit, geometry, look[0], look[1], look[2], look[3], look[4], look[5])
+		if Art.RECOLOR.has(params.hero):
+			Art.recolor(model, Art.RECOLOR[params.hero])
 	# a gold ring at the feet so heroes stand out in a crowd
 	_part(geometry, _torus(0.62, 0.72), Color("e8c24a"), Vector3(0, 0.04, 0))
 	_finish_mobile(unit, stats, 2.6)
@@ -414,6 +469,7 @@ static func _mount(geometry, faction):
 	# saddle cloth in team colour
 	if not shadow:
 		_part(root, _box(Vector3(0.6, 0.06, 0.5)), null, Vector3(0, leg_h + 0.38, 0.05), true)
+	return root
 
 
 static func _troll(geometry, faction):
@@ -434,6 +490,92 @@ static func _siege(geometry):
 	_part(geometry, _box(Vector3(0.12, 0.12, 2.0)), WOOD, Vector3(0, 1.2, 0), false,
 		Vector3(0.6, 0, 0))
 	_part(geometry, _box(Vector3(0.6, 0.3, 0.3)), null, Vector3(0, 0.85, 0.6), true)
+
+
+static func _spider(unit, geometry, color: Color, size: float):
+	"""A giant spider: abdomen, head, glowing eyes and eight jointed legs that scuttle."""
+	var anim = load("res://source/lotr/art/CreatureAnim.gd").new()
+	anim.name = "CreatureAnim"
+	var body = Node3D.new()
+	body.name = "Body"
+	geometry.add_child(body)
+	var s = size
+	var leg_h = 0.32 * s
+	body.position.y = leg_h
+	body.set_meta("base_y", leg_h)
+	var abdomen = _part(body, _sphere(0.42 * s), color, Vector3(0, 0.12 * s, 0.38 * s))
+	abdomen.scale = Vector3(1.0, 0.8, 1.25)
+	_part(body, _sphere(0.24 * s), color.lightened(0.08), Vector3(0, 0.05 * s, -0.18 * s))
+	_part(body, _sphere(0.15 * s), color, Vector3(0, 0.02 * s, -0.42 * s))
+	var eye_mat = StandardMaterial3D.new()
+	eye_mat.albedo_color = Color(0.9, 0.2, 0.1)
+	eye_mat.emission_enabled = true
+	eye_mat.emission = Color(0.9, 0.15, 0.05)
+	for x in [-0.05, 0.05]:
+		var eye = _part(body, _sphere(0.03 * s), color, Vector3(x * s, 0.08 * s, -0.55 * s))
+		eye.material_override = eye_mat
+	# fangs
+	for x in [-0.05, 0.05]:
+		_part(body, _cone(0.025 * s, 0.12 * s), Color(0.85, 0.82, 0.7), Vector3(x * s, -0.06 * s, -0.55 * s), false, Vector3(PI, 0, 0))
+	for side in [-1, 1]:
+		for i in range(4):
+			var pivot = Node3D.new()
+			pivot.position = Vector3(side * 0.12 * s, 0.02 * s, (-0.28 + i * 0.13) * s)
+			pivot.rotation.y = side * (0.4 - i * 0.28)
+			body.add_child(pivot)
+			var upper = _part(pivot, _cylinder(0.025 * s, 0.03 * s, 0.42 * s), color, Vector3(side * 0.2 * s, 0.1 * s, 0), false, Vector3(0, 0, side * -1.1))
+			_part(pivot, _cylinder(0.015 * s, 0.025 * s, 0.5 * s), color, Vector3(side * 0.43 * s, -0.12 * s, 0), false, Vector3(0, 0, side * 0.45))
+			anim.legs.append(pivot)
+	anim.body = body
+	unit.add_child(anim)
+	return body
+
+
+static func _trebuchet(geometry):
+	"""Gondor's stone-thrower: a wheeled frame, a throwing arm and a counterweight."""
+	_part(geometry, _box(Vector3(1.3, 0.25, 2.0)), WOOD, Vector3(0, 0.45, 0))
+	for x in [-0.7, 0.7]:
+		for z in [-0.7, 0.7]:
+			_part(geometry, _cylinder(0.32, 0.32, 0.12), WOOD.darkened(0.3), Vector3(x, 0.32, z), false,
+				Vector3(0, 0, PI / 2))
+		# A-frame uprights
+		_part(geometry, _box(Vector3(0.12, 1.8, 0.14)), WOOD, Vector3(x * 0.8, 1.35, -0.25), false, Vector3(0.25, 0, 0))
+		_part(geometry, _box(Vector3(0.12, 1.8, 0.14)), WOOD, Vector3(x * 0.8, 1.35, 0.35), false, Vector3(-0.25, 0, 0))
+	_part(geometry, _cylinder(0.07, 0.07, 1.3), STEEL, Vector3(0, 2.1, 0.05), false, Vector3(0, 0, PI / 2))
+	_part(geometry, _box(Vector3(0.12, 0.12, 3.0)), WOOD.lightened(0.1), Vector3(0, 2.5, 0.2), false, Vector3(-0.5, 0, 0))
+	_part(geometry, _box(Vector3(0.5, 0.5, 0.5)), STONE.darkened(0.3), Vector3(0, 1.75, -0.65))
+	_part(geometry, _box(Vector3(0.9, 0.06, 0.4)), null, Vector3(0, 0.6, 0.95), true)
+
+
+static func _ram(geometry, frame_color: Color, grond: bool):
+	"""A covered battering ram; Grond is a huge black one with a burning wolf's head."""
+	var s = 1.0 if not grond else 1.9
+	_part(geometry, _box(Vector3(1.1 * s, 0.2, 2.2 * s)), frame_color, Vector3(0, 0.45 * s, 0))
+	for x in [-0.6 * s, 0.6 * s]:
+		for z in [-0.8 * s, 0.0, 0.8 * s]:
+			_part(geometry, _cylinder(0.28 * s, 0.28 * s, 0.14 * s), frame_color.darkened(0.3),
+				Vector3(x, 0.28 * s, z), false, Vector3(0, 0, PI / 2))
+		_part(geometry, _box(Vector3(0.1 * s, 1.0 * s, 0.1 * s)), frame_color, Vector3(x * 0.85, 0.95 * s, -0.7 * s))
+		_part(geometry, _box(Vector3(0.1 * s, 1.0 * s, 0.1 * s)), frame_color, Vector3(x * 0.85, 0.95 * s, 0.7 * s))
+	# the roof (team colour on the plain ram, black iron on Grond)
+	if grond:
+		_part(geometry, _prism(Vector3(1.3 * s, 0.6 * s, 2.0 * s)), Color("2a2522"), Vector3(0, 1.7 * s, 0))
+	else:
+		_part(geometry, _prism(Vector3(1.3 * s, 0.6 * s, 2.0 * s)), null, Vector3(0, 1.7 * s, 0), true)
+	_part(geometry, _cylinder(0.16 * s, 0.16 * s, 2.6 * s), frame_color.lightened(0.15),
+		Vector3(0, 0.95 * s, -0.4 * s), false, Vector3(PI / 2, 0, 0))
+	if grond:
+		var head = _part(geometry, _cone(0.35 * s, 0.7 * s), Color("ff6a1a"), Vector3(0, 0.95 * s, -1.85 * s), false, Vector3(-PI / 2, 0, 0))
+		var fire = StandardMaterial3D.new()
+		fire.albedo_color = Color("ff7a20")
+		fire.emission_enabled = true
+		fire.emission = Color("ff5a10")
+		fire.emission_energy_multiplier = 2.0
+		head.material_override = fire
+		for x in [-0.15 * s, 0.15 * s]:
+			_part(geometry, _cone(0.08 * s, 0.3 * s), Color("2a2522"), Vector3(x, 1.25 * s, -1.6 * s))
+	else:
+		_part(geometry, _box(Vector3(0.36, 0.36, 0.3)), STEEL, Vector3(0, 0.95, -1.7))
 
 
 static func _banner(geometry, at):

@@ -34,6 +34,10 @@ var _base_panel = null
 var _build_tab = null
 var _military_tab = null
 var _age_tab = null
+var _upgrades_tab = null
+var _learn_buttons = {}
+var _item_buttons = []
+var _shop_tab = null
 var _base_hint = null
 var _bubbles = null
 var _bubble_house = null
@@ -120,6 +124,7 @@ func _button(parent, text, callback: Callable, min_width = 0) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.custom_minimum_size.x = min_width
 	button.pressed.connect(callback)
+	button.pressed.connect(func(): Sfx.play("ui_click"))
 	parent.add_child(button)
 	return button
 
@@ -182,7 +187,7 @@ func _refresh_top_bar():
 
 # --- hero panel -------------------------------------------------------------------------------
 func _build_hero_panel():
-	var panel = _panel(_root, Control.PRESET_CENTER_BOTTOM, Vector2(620, 0))
+	var panel = _panel(_root, Control.PRESET_CENTER_BOTTOM, Vector2(680, 0))
 	var box = VBoxContainer.new()
 	panel.add_child(box)
 	_hero_name = _label(box, "", 16, ACCENT)
@@ -193,20 +198,43 @@ func _build_hero_panel():
 	row.add_theme_constant_override("separation", 6)
 	box.add_child(row)
 	for key in ["Q", "W", "E", "R"]:
-		var b = _button(row, key, _on_ability_pressed.bind(key), 148)
+		var col = VBoxContainer.new()
+		col.add_theme_constant_override("separation", 2)
+		row.add_child(col)
+		var learn = _button(col, "+ Learn (Ctrl+%s)" % key, _on_learn_pressed.bind(key), 162)
+		learn.add_theme_font_size_override("font_size", 11)
+		learn.add_theme_color_override("font_color", ACCENT)
+		_learn_buttons[key] = learn
+		var b = _button(col, key, _on_ability_pressed.bind(key), 162)
 		b.custom_minimum_size.y = 46
-		b.add_theme_font_size_override("font_size", 13)
+		b.add_theme_font_size_override("font_size", 12)
+		b.add_theme_constant_override("icon_max_width", 40)
 		b.clip_text = true
 		_ability_buttons[key] = b
+	var items_row = HBoxContainer.new()
+	items_row.add_theme_constant_override("separation", 6)
+	box.add_child(items_row)
+	for i in range(GameData.ITEM_SLOTS):
+		var b = _button(items_row, "", _on_item_pressed.bind(i), 162)
+		b.add_theme_font_size_override("font_size", 11)
+		b.add_theme_constant_override("icon_max_width", 22)
+		b.clip_text = true
+		_item_buttons.append(b)
 	_respawn_label = _label(box, "", 18, Color("ff8080"))
 	_respawn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
 func _on_ability_pressed(key):
-	var event = InputEventKey.new()
-	event.physical_keycode = OS.find_keycode_from_string(key)
-	event.pressed = true
-	_match.hero_controller._handle_key(event)
+	# clicking the button arms the ability; the next left-click on the map casts it
+	_match.hero_controller.arm_ability(key)
+
+
+func _on_item_pressed(slot):
+	_match.hero_controller.use_item(slot)
+
+
+func _on_learn_pressed(key):
+	_match.hero_controller.learn_ability(key)
 
 
 func _refresh_hero():
@@ -227,18 +255,50 @@ func _refresh_hero():
 	var next_xp = GameData.XP_PER_LEVEL[min(h.level, GameData.XP_PER_LEVEL.size() - 1)]
 	_xp_bar.max_value = max(1, next_xp - lvl_xp)
 	_xp_bar.value = h.xp - lvl_xp
+	var points = h.skill_points()
+	_hero_name.text += ("    +%d skill (Ctrl+key)" % points) if points > 0 else ""
 	for key in _ability_buttons:
 		var b = _ability_buttons[key]
 		var a = h.ability(key)
+		var learn = _learn_buttons[key]
+		learn.visible = a != null and h.can_learn(key) == ""
 		if a == null:
 			b.text = "%s\n-" % key
 			b.disabled = true
-			b.tooltip_text = "Coming in a later milestone"
 			continue
+		if b.get_meta("icon_for", "") != a.name:
+			b.icon = Icons.ability(a)
+			b.set_meta("icon_for", a.name)
+		var rank = h.ability_rank(key)
+		var pips = "%d/%d" % [rank, GameData.ABILITY_MAX_RANK] if rank > 0 else ""
 		var cd = h.cooldown_left(key)
-		b.disabled = h.dead or cd > 0.0 or h.mana < a.mana
-		b.text = "%s %s\n%s" % [key, a.name, ("%ds" % ceili(cd)) if cd > 0 else ("%d mana" % a.mana)]
-		b.tooltip_text = "%s: %s" % [a.name, a.kind.replace("_", " ")]
+		b.disabled = h.dead or rank < 1 or cd > 0.0 or h.mana < a.mana
+		var state = "not learned" if rank < 1 else (("%ds" % ceili(cd)) if cd > 0 else ("%d mana" % a.mana))
+		b.text = "%s %s  %s\n%s" % [key, a.name, pips, state]
+		var live = GameData.ability_at_rank(a, max(1, rank))
+		var detail = []
+		for stat in ["damage", "heal", "stun", "root", "duration", "range", "radius"]:
+			if live.has(stat):
+				detail.append("%s %s" % [stat.capitalize(), str(snappedf(live[stat], 0.1))])
+		b.tooltip_text = "%s (rank %d/%d)\n%s\n%s\nCooldown %ds, %d mana" % [
+			a.name, rank, GameData.ABILITY_MAX_RANK, a.get("desc", ""), ", ".join(detail),
+			int(live.cooldown), a.mana]
+	for i in range(_item_buttons.size()):
+		var b = _item_buttons[i]
+		if i >= h.items.size():
+			b.icon = null
+			b.text = "%d: (empty)" % (i + 5)
+			b.disabled = true
+			b.tooltip_text = "Buy items at the Shop tab of the base panel (B in base)"
+			continue
+		var it = h.items[i]
+		var data = GameData.ITEMS[it.key]
+		var wait = max(0.0, it.ready_at - GameData.now())
+		var usable = data.get("consumable", false) or data.has("active")
+		b.icon = Icons.item(it.key)
+		b.text = "%d: %s%s" % [i + 5, data.name, (" %ds" % ceili(wait)) if wait > 0 else ""]
+		b.disabled = h.dead or not usable or wait > 0
+		b.tooltip_text = "%s\n%s" % [data.name, data.desc]
 	if h.dead:
 		_respawn_label.text = "Respawning in %ds" % ceili(max(0.0, h.respawn_at - GameData.now()))
 	else:
@@ -322,13 +382,17 @@ func _on_mode_changed(mode):
 			_mode_label.text = "Left-click the spot to defend (right-click cancels)"
 		"place":
 			_mode_label.text = "Left-click to place (hold Shift to place more, right-click cancels)"
+		"attack_move":
+			_mode_label.text = "Attack-move: left-click where to go (your hero fights anything on the way)"
+		"cast":
+			_mode_label.text = "Left-click to cast (right-click cancels)"
 		_:
 			_mode_label.text = ""
 
 
 # --- base panel -------------------------------------------------------------------------------
 func _build_base_panel():
-	_base_panel = _panel(_root, Control.PRESET_RIGHT_WIDE, Vector2(330, 0))
+	_base_panel = _panel(_root, Control.PRESET_RIGHT_WIDE, Vector2(380, 0))
 	_base_panel.offset_top = 60
 	_base_panel.offset_bottom = -60
 	var box = VBoxContainer.new()
@@ -340,13 +404,19 @@ func _build_base_panel():
 	_build_tab = _scroll_tab(tabs, "Build")
 	_military_tab = _scroll_tab(tabs, "Military")
 	_age_tab = _scroll_tab(tabs, "Age")
+	_upgrades_tab = _scroll_tab(tabs, "Blacksmith")
+	_shop_tab = _scroll_tab(tabs, "Shop")
+	var faction = _match.local_player.faction if _match.local_player != null else "gondor"
 	for key in GameData.BUILD_MENU:
 		var data = GameData.BUILDINGS[key]
 		var b = _button(_build_tab, "", _on_build_pressed.bind(key))
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.set_meta("key", key)
-		b.tooltip_text = "%s\nCost: %s\nBuild time: %ds (your hero must stay nearby)" % [
-			data.name, GameData.cost_text(data.cost), int(data.build_time)
+		var trains = ""
+		if data.has("trains"):
+			trains = "\nTrains: %s" % GameData.FACTIONS[faction].units[data.trains]
+		b.tooltip_text = "%s\nCost: %s\nBuild time: %ds (your hero must stay nearby)%s" % [
+			GameData.building_name(key, faction), GameData.cost_text(data.cost), int(data.build_time), trains
 		]
 	_base_panel.visible = false
 	_base_hint = _label(_root, "", 13, Color(1, 1, 1, 0.75))
@@ -356,12 +426,46 @@ func _build_base_panel():
 func _scroll_tab(tabs, title):
 	var scroll = ScrollContainer.new()
 	scroll.name = title
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	# never scroll sideways, and don't let long entries widen the panel: buttons clip their
+	# text (the tooltip has it in full) and labels wrap
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	tabs.add_child(scroll)
 	var box = VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.child_entered_tree.connect(func(child):
+		if child is Button:
+			child.clip_text = true
+			if child.tooltip_text == "":
+				child.tooltip_text = child.text
+		elif child is Label:
+			child.autowrap_mode = TextServer.AUTOWRAP_WORD
+			child.custom_minimum_size.x = 300)
 	scroll.add_child(box)
 	return box
+
+
+func in_base() -> bool:
+	return _in_base()
+
+
+func base_panel_open() -> bool:
+	return _base_panel != null and _base_panel.visible
+
+
+func show_ping(pos: Vector3, kind: String, from_player):
+	var hc = _match.hero_controller
+	if hc != null and hc.indicators != null:
+		hc.indicators.ping(pos, kind == "danger")
+	Sfx.play("ui_confirm" if kind != "danger" else "vital_break")
+	var who = from_player.player_name if from_player != null else "Ally"
+	show_toast("%s: %s" % [who, "Danger here!" if kind == "danger" else "Look here"])
+	minimap_ping(pos, Color(1, 0.35, 0.3) if kind == "danger" else Color(1.0, 0.9, 0.4))
+
+
+func minimap_ping(pos: Vector3, color = Color(1.0, 0.9, 0.4)):
+	var minimap = _match.find_child("Minimap")
+	if minimap != null and minimap.has_method("ping"):
+		minimap.ping(pos, color)
 
 
 func toggle_build_menu():
@@ -396,12 +500,14 @@ func _refresh_base_panel():
 		elif data.has("max"):
 			limit = " (%d/%d)" % [count, data.max]
 		b.text = "%s%s - %s%s" % [
-			data.name, limit, GameData.cost_text(data.cost),
+			GameData.building_name(key, p.faction), limit, GameData.cost_text(data.cost),
 			("   (needs %s Age)" % GameData.AGE_NAMES[data.age]) if locked else ""
 		]
 		b.disabled = locked or not p.has_resources(data.cost)
 	_refresh_military()
 	_refresh_age_tab()
+	_refresh_upgrades_tab()
+	_refresh_shop_tab()
 
 
 func _refresh_military():
@@ -418,7 +524,7 @@ func _refresh_military():
 			_military_rows[id].root.queue_free()
 			_military_rows.erase(id)
 	if producers.is_empty() and _military_tab.get_child_count() == 0:
-		_label(_military_tab, "Build a Barracks, Archery Range or Stables first.", 13)
+		_label(_military_tab, "Build a Barracks, Archery Range, Stables, Siege Works or %s first." % GameData.building_name("special_building", p.faction), 13)
 	elif not producers.is_empty():
 		for child in _military_tab.get_children():
 			if child is Label:
@@ -511,16 +617,90 @@ func _refresh_age_tab():
 		var paused = _paused_text(tcs[0].build_paused_reason)
 		_label(_age_tab, "Advancing to %s: %d%% %s" % [GameData.AGE_NAMES[tcs[0].age_target], pct, paused], 13)
 		return
-	if next > 2 or not GameData.AGES.has(next):
-		_label(_age_tab, "The Empire Age arrives in a later milestone.", 13)
+	if not GameData.AGES.has(next):
+		_label(_age_tab, "You have reached the final Age.", 13)
 		return
 	var age = GameData.AGES[next]
 	_label(_age_tab, "Next: %s Age\nCost: %s\nTime: %ds with your hero at the Town Center" % [
 		age.name, GameData.cost_text(age.cost), int(age.time)
 	], 13)
-	_label(_age_tab, "Unlocks: Archery Range, Stables, Storehouse", 12, Color(1, 1, 1, 0.7))
+	var unlocks = []
+	for key in GameData.BUILD_MENU:
+		if GameData.BUILDINGS[key].age == next:
+			unlocks.append(GameData.building_name(key, p.faction))
+	for key in GameData.UPGRADES:
+		if GameData.UPGRADES[key].age == next:
+			unlocks.append(GameData.UPGRADES[key].name)
+	_label(_age_tab, "Unlocks: " + ", ".join(unlocks), 12, Color(1, 1, 1, 0.7)).autowrap_mode = TextServer.AUTOWRAP_WORD
 	var b = _button(_age_tab, "Advance to the %s Age" % age.name, func(): _submit({"type": "advance_age"}))
 	b.disabled = not p.has_resources(age.cost)
+
+
+var _shop_signature = ""
+
+
+func _refresh_shop_tab():
+	var h = _hero()
+	if h == null:
+		return
+	var p = _match.local_player
+	var sig = "%d|%s|%d" % [p.gold, str(h.items.map(func(it): return it.key)), int(h.dead)]
+	if sig == _shop_signature:
+		return
+	_shop_signature = sig
+	for child in _shop_tab.get_children():
+		child.queue_free()
+	_label(_shop_tab, "Gold: %d    Bags: %d/%d" % [p.gold, h.items.size(), GameData.ITEM_SLOTS], 14, ACCENT)
+	for i in range(h.items.size()):
+		var data = GameData.ITEMS[h.items[i].key]
+		var slot = i
+		var sell = _button(_shop_tab, "Sell %s (+%d gold)" % [data.name, int(data.cost * GameData.SELL_REFUND)], func(): _submit({"type": "sell", "slot": slot}))
+		sell.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_shop_tab.add_child(HSeparator.new())
+	for key in GameData.SHOP_ORDER:
+		var data = GameData.ITEMS[key]
+		var b = _button(_shop_tab, "%s - %d gold" % [data.name, data.cost], func(): _submit({"type": "buy", "item": key}))
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.icon = Icons.item(key)
+		b.add_theme_constant_override("icon_max_width", 26)
+		b.tooltip_text = data.desc
+		b.disabled = h.dead or p.gold < data.cost or h.items.size() >= GameData.ITEM_SLOTS
+		_label(_shop_tab, data.desc, 11, Color(1, 1, 1, 0.65)).autowrap_mode = TextServer.AUTOWRAP_WORD
+
+
+var _upgrades_signature = ""
+
+
+func _refresh_upgrades_tab():
+	var p = _match.local_player
+	var smiths = p.buildings("blacksmith").filter(func(b): return b.is_constructed())
+	var busy = "" if smiths.is_empty() else "%s:%d" % [smiths[0].research_key, ceili(smiths[0].research_left)]
+	var affordable = []
+	for key in GameData.UPGRADES:
+		affordable.append(p.has_resources(GameData.UPGRADES[key].cost))
+	var sig = "%d|%d|%s|%s|%s" % [p.age, smiths.size(), busy, str(p.upgrades), str(affordable)]
+	if sig == _upgrades_signature:
+		return
+	_upgrades_signature = sig
+	for child in _upgrades_tab.get_children():
+		child.queue_free()
+	if smiths.is_empty():
+		_label(_upgrades_tab, "Build a Blacksmith (Kingdom Age) to research upgrades.\nUpgrades apply to squadrons trained afterwards.", 13).autowrap_mode = TextServer.AUTOWRAP_WORD
+		return
+	var smith = smiths[0]
+	if smith.research_key != "":
+		_label(_upgrades_tab, "Researching %s: %ds left" % [GameData.UPGRADES[smith.research_key].name, ceili(smith.research_left)], 13, ACCENT)
+	for key in GameData.UPGRADES:
+		var data = GameData.UPGRADES[key]
+		var done = p.upgrades.get(key, false)
+		var text = "%s - %s" % [data.name, "done" if done else GameData.cost_text(data.cost)]
+		if data.age > p.age:
+			text += "   (needs %s Age)" % GameData.AGE_NAMES[data.age]
+		var b = _button(_upgrades_tab, text, func(): _submit({"type": "research", "upgrade": key}))
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.tooltip_text = "%s\n%s\nTime: %ds" % [data.name, data.desc, int(data.time)]
+		b.disabled = done or data.age > p.age or smith.research_key != "" or not p.has_resources(data.cost)
+		_label(_upgrades_tab, data.desc, 11, Color(1, 1, 1, 0.65))
 
 
 func _paused_text(reason):
@@ -653,9 +833,12 @@ func show_end_screen(text: String, won: bool):
 	var title = _label(box, text, 42, ACCENT if won else Color("ff6b6b"))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_button(box, "Back to main menu", _back_to_menu)
+	Sfx.stop_music()
+	Sfx.play("victory" if won else "defeat")
 
 
 func _back_to_menu():
+	Sfx.stop_music()
 	Network.leave()
 	get_tree().paused = false
 	get_tree().change_scene_to_file("res://source/main-menu/Main.tscn")
@@ -668,10 +851,54 @@ func play_fx(kind: String, from: Vector3, to: Vector3):
 	match kind:
 		"arrow":
 			_arrow(from, to)
+			Sfx.play("arrow", from)
+		"tower_shot":
+			_arrow(from, to)
+			Sfx.play("tower", from)
 		"hit":
 			_spark(to, Color(1, 0.85, 0.5), 0.25)
+			Sfx.play("clash" if randf() < 0.35 else "melee", to)
 		"cast":
 			_ring(from, ACCENT, 3.0)
+			Sfx.play("arcane", from)
+		"blast":
+			_spark(from, Color(1, 0.55, 0.15), 1.8)
+			_ring(from, Color(1, 0.4, 0.1), 3.5)
+			Sfx.play("blast", from)
+		"boulder":
+			_boulder(from, to)
+		"nova":
+			_ring(from, Color(1.0, 0.75, 0.35), max(1.0, from.distance_to(to)))
+			Sfx.play("holy", from)
+		"volley":
+			# from = landing point, to = the shooter
+			for i in range(6):
+				var spread = Vector3(randf_range(-1.5, 1.5), 0, randf_range(-1.5, 1.5))
+				_arrow(to + Vector3(0, 1.5, 0), from + spread)
+			Sfx.play("arrow", to)
+		"bolt":
+			_bolt(from, to)
+			Sfx.play("arcane", from)
+		"dmg":
+			_damage_number(from, int(to.x), int(to.y), int(to.z))
+		# sound-only events
+		"death":
+			Sfx.play("death", from, 0.0, 0.2)
+		"collapse":
+			Sfx.play("collapse", from)
+		"build_done":
+			Sfx.play("build_done", from)
+		"level_up":
+			Sfx.play("level_up", from)
+			_ring(from, Color(1, 0.85, 0.3), 1.6)
+		"respawn":
+			Sfx.play("respawn", from)
+		"horn":
+			Sfx.play("horn", from)
+		"drums":
+			Sfx.play("drums", from)
+		"kill":
+			Sfx.play("kill", from)
 
 
 func ping(point: Vector3):
@@ -692,6 +919,81 @@ func _arrow(from: Vector3, to: Vector3):
 		mesh.look_at_from_position(start, end, Vector3.UP)
 	var tween = mesh.create_tween()
 	tween.tween_property(mesh, "global_position", end, clamp(start.distance_to(end) / 25.0, 0.08, 0.5))
+	tween.tween_callback(mesh.queue_free)
+
+
+func _damage_number(at: Vector3, amount: int, from_slot: int, to_slot: int):
+	var me = _match.local_player
+	var color = Color(1, 1, 1, 0.85)
+	var size = 34
+	if me != null and to_slot == me.slot_index:
+		color = Color(1.0, 0.35, 0.3)  # damage you take
+		size = 46
+	elif me != null and from_slot == me.slot_index:
+		color = Color(1.0, 0.82, 0.3)  # damage you deal
+		size = 46
+	var label = Label3D.new()
+	label.text = str(amount)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = size
+	label.outline_size = 8
+	label.pixel_size = 0.01
+	label.modulate = color
+	_match.add_child(label)
+	label.global_position = at + Vector3(randf_range(-0.4, 0.4), 2.2, randf_range(-0.4, 0.4))
+	var tween = label.create_tween().set_parallel(true)
+	tween.tween_property(label, "global_position:y", label.global_position.y + 1.2, 0.9)
+	tween.tween_property(label, "modulate:a", 0.0, 0.9).set_delay(0.3)
+	tween.chain().tween_callback(label.queue_free)
+
+
+func _bolt(from: Vector3, to: Vector3):
+	var mesh = MeshInstance3D.new()
+	var box = BoxMesh.new()
+	var length = max(0.2, from.distance_to(to))
+	box.size = Vector3(0.18, 0.18, length)
+	mesh.mesh = box
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.7, 0.9, 1.0, 0.9)
+	mat.emission_enabled = true
+	mat.emission = Color(0.5, 0.8, 1.0)
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mesh.material_override = mat
+	_match.add_child(mesh)
+	var a = from + Vector3(0, 1.0, 0)
+	var b = to + Vector3(0, 1.0, 0)
+	mesh.global_position = (a + b) / 2.0
+	if a.distance_to(b) > 0.1:
+		mesh.look_at(b, Vector3.UP)
+	var tween = mesh.create_tween()
+	tween.tween_property(mat, "albedo_color:a", 0.0, 0.35)
+	tween.tween_callback(mesh.queue_free)
+
+
+func _boulder(from: Vector3, to: Vector3):
+	# a lobbed stone: arcs up and lands with a dust burst
+	var mesh = MeshInstance3D.new()
+	var sphere = SphereMesh.new()
+	sphere.radius = 0.35
+	sphere.height = 0.7
+	sphere.radial_segments = 6
+	sphere.rings = 3
+	mesh.mesh = sphere
+	mesh.material_override = UnitFactory._material(Color("8a857a"))
+	_match.add_child(mesh)
+	var start = from + Vector3(0, 2.0, 0)
+	var end = to + Vector3(0, 0.5, 0)
+	mesh.global_position = start
+	var time = clamp(start.distance_to(end) / 12.0, 0.4, 1.4)
+	var arc = func(t: float):
+		if is_instance_valid(mesh):
+			mesh.global_position = start.lerp(end, t) + Vector3(0, sin(t * PI) * 5.0, 0)
+	var tween = mesh.create_tween()
+	tween.tween_method(arc, 0.0, 1.0, time)
+	tween.tween_callback(func(): _spark(to, Color(0.75, 0.65, 0.5), 1.2))
+	tween.tween_callback(func(): Sfx.play("boulder", to))
 	tween.tween_callback(mesh.queue_free)
 
 

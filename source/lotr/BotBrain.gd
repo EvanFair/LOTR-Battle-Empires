@@ -5,12 +5,14 @@ extends Node
 
 const THINK_INTERVAL = 1.0
 const BUILD_ORDER = [
-	"village_house", "barracks", "village_house", "village_house", "AGE",
-	"archery_range", "storehouse", "village_house", "stables", "village_house", "watchtower",
-	"village_house", "barracks", "village_house", "village_house",
+	"village_house", "barracks", "village_house", "village_house", "AGE2",
+	"archery_range", "storehouse", "village_house", "stables", "village_house", "blacksmith",
+	"R:forged_blades", "watchtower", "village_house", "R:plated_armour", "village_house",
+	"AGE3", "siege_works", "village_house", "special_building", "R:war_drills",
+	"R:master_smiths", "barracks",
 ]
 const ASSIGNMENT_PLAN = [
-	"food", "wood", "stone", "iron", "food", "wood", "food", "iron", "wood", "stone"
+	"food", "wood", "food", "iron", "stone", "food", "wood", "iron", "food", "stone"
 ]
 const RETREAT_HP = 0.3
 const PUSH_AFTER = 150.0  # seconds before the hero leaves the base to fight
@@ -18,6 +20,7 @@ const PUSH_AFTER = 150.0  # seconds before the hero leaves the base to fight
 var player = null
 var _think_left = 1.0
 var _order_index = 0
+var _stall = 0  # thinks spent waiting on the current build step
 var _elapsed = 0.0
 var _rng = RandomNumberGenerator.new()
 var _match = null
@@ -65,6 +68,7 @@ func _think():
 	if not hero.is_alive():
 		return
 	_use_abilities(hero)
+	_shop(hero)
 	if hero.hp < hero.hp_max * RETREAT_HP:
 		_cmd({"type": "hero_move", "pos": tc.global_position + Vector3(0, 0, tc.stats_size() + 2)})
 		return
@@ -89,10 +93,40 @@ func _think():
 # --- economy ------------------------------------------------------------------------------------
 func _assign_villagers():
 	var houses = player.buildings("village_house").filter(func(h): return h.is_constructed())
+	var plan = []
 	for i in range(houses.size()):
-		var wanted = ASSIGNMENT_PLAN[i % ASSIGNMENT_PLAN.size()]
+		plan.append(ASSIGNMENT_PLAN[i % ASSIGNMENT_PLAN.size()])
+	# whatever the next build step is short of gets at least one house, taken from a resource
+	# that has several (otherwise e.g. 4 houses on food/wood/iron wait forever for stone)
+	for res in _next_step_shortfall():
+		if res in plan or res == "gold":
+			continue
+		for i in range(plan.size() - 1, -1, -1):
+			if plan.count(plan[i]) > 1:
+				plan[i] = res
+				break
+	for i in range(houses.size()):
+		var wanted = plan[i]
 		if houses[i].assignment != wanted:
 			_cmd({"type": "assign_villagers", "house": houses[i].net_id, "assignment": wanted})
+
+
+func _next_step_shortfall() -> Array:
+	if _order_index >= BUILD_ORDER.size():
+		return []
+	var step = BUILD_ORDER[_order_index]
+	var cost = {}
+	if step.begins_with("AGE"):
+		cost = GameData.AGES[int(step.substr(3))].cost
+	elif step.begins_with("R:"):
+		cost = GameData.UPGRADES[step.substr(2)].cost
+	else:
+		cost = GameData.BUILDINGS[step].cost
+	var short = []
+	for res in cost:
+		if player.get(res) < cost[res]:
+			short.append(res)
+	return short
 
 
 func _configure_military():
@@ -135,15 +169,33 @@ func _advance_build_order(hero, tc) -> bool:
 	if _order_index >= BUILD_ORDER.size():
 		return false
 	var step = BUILD_ORDER[_order_index]
-	if step == "AGE":
-		if player.age >= 2:
+	if step.begins_with("AGE"):
+		var target = int(step.substr(3))
+		if player.age >= target:
 			_order_index += 1
+			return false
+		if not player.has_resources(GameData.AGES[target].cost):
+			return target == 2  # Age II is worth waiting for; Age III gathers while fighting
+		if not player.in_base(hero.global_position):
+			_stand_at(hero, tc)
+			return true
+		_cmd({"type": "advance_age"})
+		return true
+	if step.begins_with("R:"):
+		var key = step.substr(2)
+		var smiths = player.buildings("blacksmith").filter(func(b): return b.is_constructed())
+		if player.upgrades.get(key, false) or smiths.is_empty():
+			_order_index += 1
+			return false
+		if GameData.UPGRADES[key].age > player.age or smiths[0].research_key != "":
+			return false
+		if not player.has_resources(GameData.UPGRADES[key].cost):
 			return false
 		if not player.in_base(hero.global_position):
 			_stand_at(hero, tc)
 			return true
-		if player.has_resources(GameData.AGES[2].cost):
-			_cmd({"type": "advance_age"})
+		_cmd({"type": "research", "upgrade": key})
+		_order_index += 1
 		return true
 	var data = GameData.BUILDINGS[step]
 	if data.age > player.age:
@@ -152,6 +204,16 @@ func _advance_build_order(hero, tc) -> bool:
 		_order_index += 1
 		return false
 	if not player.has_resources(data.cost):
+		# waiting a long time on one step: grow the economy with another house meanwhile
+		_stall += 1
+		if _stall > 60 and step != "village_house":
+			var houses = player.buildings("village_house").size()
+			if houses < GameData.MAX_HOUSES and player.has_resources(GameData.BUILDINGS.village_house.cost) and player.in_base(hero.global_position):
+				var spot = _find_spot("village_house", tc)
+				if spot != null:
+					_cmd({"type": "build", "building": "village_house", "pos": spot})
+					_stall = 0
+					return true
 		return false  # wait and gather
 	if not player.in_base(hero.global_position):
 		_stand_at(hero, tc)
@@ -162,6 +224,7 @@ func _advance_build_order(hero, tc) -> bool:
 		return false
 	_cmd({"type": "build", "building": step, "pos": spot})
 	_order_index += 1
+	_stall = 0
 	return true
 
 
@@ -201,6 +264,9 @@ func _push(hero, tc):
 		_order_nearby_squads(hero, "attack", enemy)
 		return
 	if my_squads.is_empty():
+		# no army in the field: farm the nearest jungle camp while healthy, else wait at home
+		if hero.hp > hero.hp_max * 0.65 and _hunt(hero):
+			return
 		if hero.global_position.distance_to(tc.global_position) > 12.0:
 			_stand_at(hero, tc)
 		return
@@ -214,6 +280,30 @@ func _push(hero, tc):
 		_cmd({"type": "hero_move", "pos": dest})
 
 
+func _hunt(hero) -> bool:
+	# a creature already fighting us comes first
+	for c in get_tree().get_nodes_in_group("units"):
+		if c.unit_kind == "creature" and c.is_alive() and c.get("order_target") == hero:
+			_cmd({"type": "hero_attack", "target": c.net_id})
+			return true
+	var best = null
+	var best_d = 45.0
+	for camp in _match.camps:
+		if camp.key == "troll" and hero.level < 8:
+			continue  # the Cave Troll is for strong heroes
+		for m in camp.members:
+			if is_instance_valid(m) and m.is_alive():
+				var d = hero.global_position.distance_to(m.global_position)
+				if d < best_d:
+					best_d = d
+					best = m
+	if best == null:
+		return false
+	if hero.order != hero.Order.ATTACK or hero.order_target != best:
+		_cmd({"type": "hero_attack", "target": best.net_id})
+	return true
+
+
 func _order_nearby_squads(hero, order, target):
 	for s in get_tree().get_nodes_in_group("squadrons"):
 		if s.player != player or s.state == s.State.ATTACK:
@@ -222,18 +312,66 @@ func _order_nearby_squads(hero, order, target):
 			_cmd({"type": "squad_order", "squad": s.squad_id, "order": order, "target": target.net_id})
 
 
+const BUILD_FIGHTER = ["horse_rohan", "elven_blade", "dwarf_mail", "westernesse"]
+const BUILD_CASTER = ["horse_rohan", "ring_barahir", "dwarf_mail", "phial"]
+
+
+func _shop(hero):
+	if not player.in_base(hero.global_position) or hero.items.size() >= GameData.ITEM_SLOTS:
+		return
+	var caster = GameData.HEROES[hero.hero_key].role in ["Caster", "Enchanter"]
+	var plan = BUILD_CASTER if caster else BUILD_FIGHTER
+	var owned = hero.items.map(func(it): return it.key)
+	for key in plan:
+		if key in owned:
+			continue
+		# keep enough Gold for Age III and research once the Kingdom Age is reached
+		var reserve = 100 if player.age >= 2 else 0
+		if player.gold - reserve >= GameData.ITEMS[key].cost:
+			_cmd({"type": "buy", "item": key})
+		return
+
+
+func _learn_abilities(hero):
+	if hero.skill_points() <= 0:
+		return
+	# R whenever possible, otherwise the lowest-ranked of Q/W/E (Q first on ties)
+	if hero.can_learn("R") == "":
+		_cmd({"type": "learn", "key": "R"})
+		return
+	var best = ""
+	for key in ["Q", "W", "E"]:
+		if hero.can_learn(key) == "" and (best == "" or hero.ability_rank(key) < hero.ability_rank(best)):
+			best = key
+	if best != "":
+		_cmd({"type": "learn", "key": best})
+
+
 func _use_abilities(hero):
-	var enemy = Combat.closest_enemy(hero, hero.global_position, 10.0)
+	_learn_abilities(hero)
+	var enemy = Combat.closest_enemy(hero, hero.global_position, 12.0)
 	if enemy == null:
 		return
+	var distance = hero.global_position.distance_to(enemy.global_position)
 	for a in hero.abilities():
-		if hero.cooldown_left(a.key) > 0.0 or hero.mana < a.mana:
+		if hero.ability_rank(a.key) < 1 or hero.cooldown_left(a.key) > 0.0 or hero.mana < a.mana:
 			continue
+		var aim = HeroAbilities.aim(a)
 		var cmd = {"type": "cast", "key": a.key, "pos": enemy.global_position}
-		if a.kind in ["execute_strike", "pin_shot"]:
-			var reach = a.get("range", 2.0)
-			if hero.global_position.distance_to(enemy.global_position) > reach:
-				continue
-			cmd["target"] = enemy.net_id
+		match aim.mode:
+			"unit":
+				if distance > aim.range + 0.5:
+					continue
+				cmd["target"] = enemy.net_id
+			"self":
+				# novas need enemies in reach; buffs and rallies are for when a fight is close
+				var reach = aim.radius if a.kind == "nova" else 8.0
+				if distance > reach:
+					continue
+			"point", "line":
+				if a.kind != "summon" and distance > aim.range:
+					continue
+				if a.kind == "dash" and hero.hp > hero.hp_max * 0.5:
+					continue  # bots keep dashes for escaping or chasing low targets
 		_cmd(cmd)
 		return

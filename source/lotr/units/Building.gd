@@ -28,6 +28,10 @@ var villagers = []
 var respawn_left = 0.0
 var initial_villagers_spawned = false
 
+# blacksmith: research in progress
+var research_key = ""
+var research_left = 0.0
+
 # town center: age advance in progress
 var age_target = 0
 var age_progress = 0.0
@@ -48,6 +52,7 @@ func _ready():
 	_label3d.position.y = get_meta("model_height", 3.2) + 1.0
 	add_child(_label3d)
 	trains = GameData.BUILDINGS[building_key].get("trains", "")
+	display_name = GameData.building_name(building_key, player.faction)
 	auto_acquire = attack_damage != null
 	if progress < 1.0:
 		_apply_construction_look(true)
@@ -112,6 +117,10 @@ func _construction_tick(delta):
 
 func _finish_construction():
 	_apply_construction_look(false)
+	if not puppet and building_key != "town_center" and is_inside_tree():
+		var match_node = get_tree().get_first_node_in_group("lotr_match")
+		if match_node != null and match_node.started:
+			match_node.fx("build_done", global_position, global_position)
 	MatchSignals.unit_construction_finished.emit(self)
 
 
@@ -173,6 +182,8 @@ func _process(_delta):
 		text = "Supply %d%%" % int(supply_fraction() * 100) if not supply_full() else "Next %ds" % ceili(cycle_left)
 	elif building_key == "town_center" and age_target > 0:
 		text = "Age %d%%" % int(age_progress * 100)
+	elif research_key != "" and is_in_group("controlled_units"):
+		text = "%s %ds" % [GameData.UPGRADES[research_key].name, ceili(research_left)]
 	_label3d.text = text
 	_label3d.visible = text != "" and find_child("Geometry").visible
 
@@ -192,11 +203,13 @@ func _physics_process(delta):
 		_villager_tick(delta)
 	if building_key == "town_center" and age_target > 0:
 		_age_tick(delta)
+	if research_key != "":
+		_research_tick(delta)
 
 
 # --- production -------------------------------------------------------------------------------
 func squad_stats():
-	return GameData.troop_stats(player.faction, trains)
+	return GameData.troop_stats(player.faction, trains, player.upgrades)
 
 
 func squad_cost() -> Dictionary:
@@ -329,6 +342,25 @@ func set_assignment(value: String):
 	assignment = value
 
 
+# --- blacksmith: research -------------------------------------------------------------------------
+func start_research(key: String):
+	research_key = key
+	research_left = GameData.UPGRADES[key].time
+
+
+func _research_tick(delta):
+	research_left -= delta
+	if research_left > 0.0:
+		return
+	player.upgrades[research_key] = true
+	var match_node = get_tree().get_first_node_in_group("lotr_match")
+	match_node.toast_player(
+		player.slot_index, "Research complete: %s" % GameData.UPGRADES[research_key].name
+	)
+	research_key = ""
+	research_left = 0.0
+
+
 # --- town center: Ages -------------------------------------------------------------------------
 func start_age_advance(target_age: int):
 	age_target = target_age
@@ -347,6 +379,8 @@ func _age_tick(delta):
 		age_target = 0
 		age_progress = 0.0
 		var match_node = get_tree().get_first_node_in_group("lotr_match")
+		var shadow = GameData.FACTIONS[player.faction].side == "shadow"
+		match_node.fx("drums" if shadow else "horn", global_position, global_position)
 		match_node.toast_player(
 			player.slot_index, "Advanced to the %s Age" % GameData.AGE_NAMES[player.age]
 		)

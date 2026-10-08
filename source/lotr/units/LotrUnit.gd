@@ -25,12 +25,16 @@ var ranged = false
 var armor = 0.0  # flat damage reduction fraction (0..0.9)
 var damage_mult = 1.0
 var attack_speed_mult = 1.0
+var attack_speed_bonus = 0.0  # from items (+0.15 = 15% faster)
+var speed_bonus = 0.0  # from items
 var speed_mult = 1.0:
 	set(value):
 		speed_mult = value
 		_apply_speed()
 var rooted_until = 0.0
-var buffs = []  # {stat, mult, until}
+var stunned_until = 0.0
+var buffs = []  # {stat, mult, until}; mult > 1 is a buff, < 1 a debuff (slow, weaken)
+var _base_armor = -1.0
 var last_attacker = null
 var anim_driver = null
 var last_attack_at = -10.0  # game time of the latest swing (replicated so puppets animate too)
@@ -38,6 +42,8 @@ var last_attack_at = -10.0  # game time of the latest swing (replicated so puppe
 var order = Order.IDLE
 var order_target = null  # unit for ATTACK
 var order_position = null  # Vector3 for MOVE
+var attack_move_target = null  # Vector3 while attack-moving: fight anything met on the way
+var _pending_hit = null  # {target, at}: the swing has started, the blow lands at "at"
 
 var _retarget_timer = 0.0
 var _repath_timer = 0.0
@@ -75,21 +81,34 @@ func order_move(position: Vector3):
 	order = Order.MOVE
 	order_position = position
 	order_target = null
+	attack_move_target = null
+	_pending_hit = null  # moving cancels a swing that hasn't landed yet (kiting)
 	if _movement != null:
 		_movement.move(position)
 
 
-func order_attack(target):
+func order_attack_move(position: Vector3):
+	"""Walk to position, stopping to fight any enemy met on the way, then carry on."""
+	order_move(position)
+	attack_move_target = position
+	_retarget_timer = 0.0
+
+
+func order_attack(target, keep_attack_move = false):
 	if target == null or not is_instance_valid(target):
 		return
+	var resume = attack_move_target if keep_attack_move else null
 	order = Order.ATTACK
 	order_target = target
+	attack_move_target = resume
 	_repath_timer = 0.0
 
 
 func order_stop():
 	order = Order.IDLE
 	order_target = null
+	attack_move_target = null
+	_pending_hit = null
 	if _movement != null:
 		_movement.stop()
 
@@ -103,16 +122,37 @@ func _physics_process(delta):
 	if puppet or not is_alive():
 		return
 	_expire_buffs()
+	_land_pending_hit()
 	_brain(delta)
 
 
 # --- buffs --------------------------------------------------------------------------------------
 func apply_buff(stat: String, mult: float, duration: float):
-	"""stat: damage | attack_speed | speed. Same stat buffs don't stack; the stronger one wins."""
+	"""stat: damage | attack_speed | speed (multipliers) or armor (added, e.g. 0.3).
+	The strongest buff and the strongest debuff of a stat apply; same-sign ones don't stack."""
 	var until = GameData.now() + duration
-	buffs = buffs.filter(func(b): return b.stat != stat or b.mult > mult)
+	var debuff = mult < 1.0 and stat != "armor"
+	buffs = buffs.filter(func(b):
+		if b.stat != stat or (b.mult < 1.0 and stat != "armor") != debuff:
+			return true
+		return (b.mult < mult) if debuff else (b.mult > mult))
 	buffs.append({"stat": stat, "mult": mult, "until": until})
 	_recompute_buffs()
+
+
+func stun(duration: float):
+	stunned_until = max(stunned_until, GameData.now() + duration)
+	_pending_hit = null
+	if _movement != null:
+		_movement.stop()
+
+
+func is_stunned() -> bool:
+	return GameData.now() < stunned_until
+
+
+func is_rooted() -> bool:
+	return GameData.now() < rooted_until or is_stunned()
 
 
 func _expire_buffs():
@@ -126,21 +166,38 @@ func _expire_buffs():
 
 
 func _recompute_buffs():
-	var mults = {"damage": 1.0, "attack_speed": 1.0, "speed": 1.0}
+	var up = {"damage": 1.0, "attack_speed": 1.0, "speed": 1.0}
+	var down = {"damage": 1.0, "attack_speed": 1.0, "speed": 1.0}
+	var armor_bonus = 0.0
 	for b in buffs:
-		mults[b.stat] = max(mults[b.stat], b.mult)
-	damage_mult = mults.damage
-	attack_speed_mult = mults.attack_speed
-	speed_mult = mults.speed
+		if b.stat == "armor":
+			armor_bonus = max(armor_bonus, b.mult)
+		elif b.mult >= 1.0:
+			up[b.stat] = max(up[b.stat], b.mult)
+		else:
+			down[b.stat] = min(down[b.stat], b.mult)
+	damage_mult = up.damage * down.damage
+	attack_speed_mult = up.attack_speed * down.attack_speed
+	speed_mult = up.speed * down.speed
+	if _base_armor < 0.0:
+		_base_armor = armor
+	armor = min(0.9, _base_armor + armor_bonus)
 
 
 func _brain(delta):
+	if is_stunned():
+		if _movement != null:
+			_movement.stop()
+		return
 	if GameData.now() < rooted_until and _movement != null:
 		_movement.stop()
 	match order:
 		Order.MOVE:
+			if attack_move_target != null and _scan_attack_move(delta):
+				return
 			if _movement == null or _movement.target_position == Vector3.INF:
 				order = Order.IDLE
+				attack_move_target = null
 			elif global_position_yless.distance_to(order_position * Vector3(1, 0, 1)) < 0.6:
 				order_stop()
 		Order.ATTACK:
@@ -170,9 +227,24 @@ func _acquire_range():
 	return aggro_range if aggro_range > 0.0 else sight_range
 
 
+func _scan_attack_move(delta) -> bool:
+	_retarget_timer -= delta
+	if _retarget_timer > 0.0:
+		return false
+	_retarget_timer = RETARGET_INTERVAL
+	var enemy = Combat.closest_enemy(self, global_position, max(attack_range + 2.0, _acquire_range()))
+	if enemy == null:
+		return false
+	order_attack(enemy, true)
+	return true
+
+
 func _process_attack(delta):
 	if order_target == null or not is_instance_valid(order_target) or not order_target.is_alive():
-		order_stop()
+		if attack_move_target != null:
+			order_attack_move(attack_move_target)  # target down: carry on to the destination
+		else:
+			order_stop()
 		return
 	var distance = global_position_yless.distance_to(order_target.global_position_yless)
 	var reach = attack_range + _target_radius(order_target)
@@ -203,9 +275,26 @@ func _try_hit(target):
 	var distance = global_position_yless.distance_to(target.global_position_yless)
 	if distance > attack_range + _target_radius(target) + 0.2:
 		return
-	_next_hit_at = now + attack_interval / attack_speed_mult
+	_next_hit_at = now + attack_interval / (attack_speed_mult * (1.0 + attack_speed_bonus))
 	_face(target.global_position)
 	notify_attack()
+	# the blow lands partway into the swing (or the arrow leaves the string); towers fire at once
+	var windup = min(0.3, attack_interval * 0.3) / attack_speed_mult
+	if unit_kind == "building" or windup < 0.05:
+		Combat.attack(self, target, attack_damage * damage_mult)
+	else:
+		_pending_hit = {"target": target, "at": now + windup}
+
+
+func _land_pending_hit():
+	if _pending_hit == null or GameData.now() < _pending_hit.at:
+		return
+	var target = _pending_hit.target
+	_pending_hit = null
+	if target == null or not is_instance_valid(target) or not target.is_alive():
+		return
+	if global_position_yless.distance_to(target.global_position_yless) > attack_range + _target_radius(target) + 1.0:
+		return
 	Combat.attack(self, target, attack_damage * damage_mult)
 
 
@@ -223,7 +312,7 @@ func _face(point: Vector3):
 
 func _apply_speed():
 	if _movement != null and _base_speed > 0.0:
-		_movement.speed = _base_speed * speed_mult
+		_movement.speed = _base_speed * speed_mult * (1.0 + speed_bonus)
 
 
 # --- stats ------------------------------------------------------------------------------------
@@ -258,6 +347,9 @@ func _set_action(action_node):
 
 func _handle_unit_death():
 	died_on_host.emit()
+	var match_node = get_tree().get_first_node_in_group("lotr_match") if is_inside_tree() else null
+	if match_node != null and not puppet:
+		match_node.fx("collapse" if unit_kind == "building" else "death", global_position, global_position)
 	_leave_remains()
 	super()
 

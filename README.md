@@ -28,32 +28,60 @@ Every push to `main` builds a fresh `.exe` and publishes it as a new Release aut
 
 ### Controls
 
+The full reasoning, and how other open-source MOBAs do it, is in [docs/CONTROLS.md](docs/CONTROLS.md).
+
 | Input | Action |
 |---|---|
-| Right-click ground / enemy | Move your hero / attack |
-| **Q W E R** | Hero abilities (aimed at the cursor or the enemy under it) |
-| **S** | Stop |
-| **Tab** | Cycle through squadrons within 15m of your hero |
+| Right-click ground / enemy | Move your hero / attack (green / red marker) |
+| **A**, then left-click | Attack-move: walk there, fighting anything on the way |
+| **S** / **H** | Stop / hold position |
+| **Q W E R** | Abilities. **Hold** to see the range and aim, **release** to cast. Right-click while holding cancels. A unit-target ability walks into range first. |
+| **Ctrl + Q/W/E/R** | Learn or level up an ability (one skill point per hero level; ultimate R at levels 6/8/10) |
+| **B** | In your base: base panel (Build, Military, Age, Blacksmith). Outside: **Recall** home (6s; moving, casting or taking damage cancels it) |
+| **Tab** | Cycle through squadrons within 15m of your hero (a gold ring shows the 15m range) |
 | **1 / 2 / 3 / 4** | Selected squadron: **Attack** (then click an enemy) / **Defend** (then click a spot) / **Hold** / **Return home** (to heal) |
-| **B** | Base panel (only inside your base): Build, Military, Age |
+| **Alt + left-click** | Ping for your team (**Alt+Shift**: danger ping) |
 | Left-click your house or villager | Villager bubbles: Food / Wood / Stone / Iron / Return home |
 | Left-click your building | Info (and cancel construction for a 75% refund) |
 | **Y** / **Space** | Camera lock on/off / snap back to your hero |
 | Arrow keys, mouse at screen edge | Pan the camera (when unlocked) |
+| Minimap: left-click / right-click | Look there (frees the camera) / move your hero there |
 | Mouse wheel / **Z**, **C** | Zoom / rotate the camera |
-| **Esc** | Cancel placement or targeting; otherwise opens the menu |
+| **Esc** | Cancel aiming, placement or targeting; otherwise opens the menu |
 
 ### How a match works
 
-- **Economy:** each Village House holds 5 villagers. Assign each house to Food, Wood, Stone or Iron; more houses on a resource means it comes in faster. A killed villager is replaced after 45s for 50 Food. **Gold** comes from kills.
+- **Economy:** each Village House holds 5 villagers. Assign each house to Food, Wood, Stone or Iron; more houses on a resource means it comes in faster. Herds of game regrow; forests, quarries and mines run out. A killed villager is replaced after 45s for 50 Food. **Gold** comes from kills and from clearing jungle camps.
 - **Building:** only heroes build. Place a building from the base panel, then **stand next to it** while the timer runs. If you leave, it pauses. An enemy hero nearby also pauses it. Two heroes build 1.5× faster. Watchtowers can go anywhere; everything else goes inside your base.
-- **Ages:** advance to the Kingdom Age at the Town Center (your hero must stay there) to unlock the Archery Range, Stables and Storehouse.
-- **Armies:** Barracks (infantry), Archery Range (archers) and Stables (riders) train squadrons. Villagers must **carry supplies** to the building first. Turn on **Auto-repeat** and pick a lane, and you get a squadron every 60s that marches that lane.
+- **Ages:** advance at the Town Center (your hero must stay there).
+  - **Kingdom Age** unlocks the Archery Range, Stables, Storehouse and Blacksmith.
+  - **Empire Age** unlocks the Siege Works, your faction's special building (Ranger Hideout, Meduseld, Black Gate Forge, Orthanc Furnace) and the top Blacksmith research.
+- **Armies:**
+  - Barracks (infantry), Archery Range (archers), Stables (riders), Siege Works (heavy) and the special building train squadrons.
+  - Villagers must **carry supplies** to the building first. Turn on **Auto-repeat** and pick a lane, and you get a squadron every 60s that marches that lane.
+  - Every faction's heavy and special troops are different:
+    - Gondor: Trebuchets and Rangers.
+    - Rohan: the Royal Guard and Horse Archers.
+    - Mordor: Mountain Trolls and Grond.
+    - Isengard: Battering Rams and Berserker Sappers, who blow up.
+  - Siege engines go for buildings first.
+- **Blacksmith:** research Forged Blades, Plated Armour, War Drills (+2 soldiers per squadron) and Master Smiths. Upgrades apply to squadrons trained afterwards.
 - **Storehouse:** one extra drop-off point that shortens villager trips. **If it's destroyed you lose half your stockpile**, and you must wait 2 minutes before rebuilding it.
 - **Counters:** infantry beats riders, riders beat archers, archers beat infantry, and heavy units wreck buildings.
+- **Heroes:** 12 heroes, 3 per faction, each with four abilities:
+  - Gondor: Aragorn, Boromir, Faramir.
+  - Rohan: Théoden, Éomer, Éowyn.
+  - Mordor: Gothmog, the Witch-king, Shelob.
+  - Isengard: Uglúk, Saruman, Lurtz.
+  - You get a skill point per level. Spend it with **Ctrl+Q/W/E/R**; each ability has 3 ranks. Abilities stun, root, slow and weaken.
+- **The Wild:**
+  - Spider and warg camps sit between the lanes. They ignore you until struck, then the whole camp fights back. Pull them too far and they go home and heal.
+  - Clearing a camp pays Gold and XP.
+  - The **Cave Troll** lairs in the middle of the map, where the diagonal lanes cross. Slay it for Gold for your whole team and +20% damage for 2 minutes.
+- **Shop:** the Shop tab of the base panel sells Lembas, Athelas, the Steed of Rohan, Elven Blade, Dwarven Mail, Mithril Coat, the Phial of Galadriel and more.
+  - 4 item slots (keys **5–8** to use).
+  - Selling refunds half.
 - **Win:** destroy every enemy Town Center.
-
-The heroes playable now are Aragorn (all four abilities), and Théoden, Gothmog and Lurtz (one signature ability each). Art comes from Kay Lousberg's free CC0 KayKit packs (animated characters, medieval buildings, nature); each faction has its own building colours, unit tints and weapons. See `assets/kaykit/` for the licences.
 
 ## Tests
 
@@ -64,7 +92,8 @@ Every test runs headless. Use Godot 4.3:
 godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6
 godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6 --preset=ffa
 
-# a scripted player checks 23 game rules (construction, hauling, Storehouse, abilities...)
+# a scripted player checks the game rules (construction, hauling, Storehouse, abilities, Ages,
+# Blacksmith, siege, recall, shop, jungle camps...)
 godot --headless --fixed-fps 60 --path . res://tests/auto/RulesTest.tscn
 
 # LAN: host and client on one machine
@@ -90,6 +119,17 @@ GitHub Actions runs the bot and rules tests on every push (`.github/workflows/te
 | `source/lotr/map/MapGen.gd` | The 4-base, 6-lane map |
 | `source/match/…` | Reused from open-rts: navigation, fog of war, minimap, camera, unit traits |
 
-3D art: [KayKit](https://kaylousberg.com) Adventurers, Skeletons and Medieval Hexagon packs by Kay Lousberg (CC0).
+## Credits
+
+- 3D art: [KayKit](https://kaylousberg.com) Adventurers, Skeletons and Medieval Hexagon packs by Kay Lousberg (CC0).
+- Sound effects and music (`assets/omoba/audio/`, CC0), all from [Open MOBA](https://github.com/o-moba/omoba-bevy) (`LICENSE.md` there has the provenance):
+  - "Exploration Theme" by Cleyton Kauffman.
+  - RPG Audio by Kenney.
+  - Synthesized effects by the Open MOBA contributors.
+- Horn, war drums, sword clash, boulder, blast and building sounds (`assets/lotr/audio/`): synthesized for this game by `tools/synth_sfx.py` (CC0).
+- Skill icon atlases (`assets/omoba/skills/`): **Open Moba contributors**, <https://github.com/o-moba/omoba-bevy>, licensed [CC-BY-4.0](assets/omoba/CC-BY-4.0.txt). They are unmodified.
+- Item and HUD icons (`assets/omoba/icons/`): game-icons.net artists (Delapouite, Lorc and others), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Per-icon credits are in `assets/omoba/icons/LICENSES.md`.
+- Control and MOBA-mechanic research drew on the designs of [Open MOBA](https://github.com/o-moba/omoba-bevy), [MOBA_CSharp_Unity](https://github.com/yasgamesdev/MOBA_CSharp_Unity), [OpenMOBA](https://github.com/yasgamesdev/OpenMOBA) and [amoba](https://github.com/AmbientRun/amoba). No code was copied from them; see [docs/CONTROLS.md](docs/CONTROLS.md).
+
 Built on [lampe-games/godot-open-rts](https://github.com/lampe-games/godot-open-rts) (MIT, see `LICENSE-open-rts`).
 Personal fan project, not affiliated with the Tolkien Estate or Warner Bros.

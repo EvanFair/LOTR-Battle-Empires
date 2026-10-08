@@ -39,6 +39,17 @@ const BUILDING_MODELS = {
 	"archery_range": ["building_archeryrange_%s", 1.0],
 	"stables": ["building_tavern_%s", 1.0],
 	"storehouse": ["building_market_%s", 1.05],
+	"blacksmith": ["building_blacksmith_%s", 1.1],
+	"siege_works": ["building_tower_catapult_%s", 1.0],
+	"special_building": ["building_church_%s", 1.0],
+}
+
+# classes that ride (a horse for the Free Peoples, a warg for the Shadow)
+const MOUNTED = {"rohan": ["rider", "heavy", "special"]}
+const DEFAULT_MOUNTED = ["rider"]
+# siege engines built procedurally in UnitFactory (no KayKit model for them)
+const SIEGE = {
+	"gondor": {"heavy": "trebuchet"}, "isengard": {"heavy": "ram"}, "mordor": {"special": "grond"},
 }
 
 # unit look: model, visible props, tint, scale, animation set, hidden meshes
@@ -56,6 +67,7 @@ const UNITS = {
 		"infantry": ["Knight", ["1H_Sword", "Round_Shield"], Color(1.0, 0.92, 0.78), 1.0, "melee"],
 		"archer": ["Rogue", ["2H_Crossbow"], Color(1.0, 0.93, 0.8), 1.0, "ranged"],
 		"rider": ["Knight", ["1H_Sword", "Round_Shield"], Color(1.0, 0.92, 0.78), 0.9, "melee"],
+		"heavy": ["Knight", ["1H_Sword", "Badge_Shield"], Color(1.0, 0.85, 0.55), 0.95, "melee"],
 		"special": ["Rogue", ["1H_Crossbow"], Color(1.0, 0.93, 0.8), 0.9, "ranged1h"],
 	},
 	"mordor":
@@ -71,17 +83,37 @@ const UNITS = {
 		"infantry": ["Knight", ["1H_Sword", "Spike_Shield"], URUK, 1.05, "melee"],
 		"archer": ["Rogue", ["2H_Crossbow"], URUK, 1.0, "ranged"],
 		"rider": ["Barbarian", ["1H_Axe"], URUK, 0.85, "melee"],
-		"special": ["Barbarian", ["2H_Axe"], URUK, 1.1, "melee2h"],
+		"special": ["Rogue", ["Throwable", "Knife"], URUK, 0.95, "melee"],
 	},
 }
 
 const HEROES = {
 	"aragorn": ["Rogue_Hooded", ["Knife", "Knife_Offhand"], Color(0.62, 0.66, 0.58), 1.25, "melee", []],
 	"theoden": ["Knight", ["2H_Sword"], Color(1.0, 0.88, 0.6), 1.25, "melee2h", []],
-	"gothmog": ["Barbarian", ["2H_Axe"], Color(0.62, 0.62, 0.5), 1.4, "melee2h", []],
+	"gothmog": ["Barbarian", ["2H_Axe"], Color(0.62, 0.62, 0.5), 1.4, "melee2h", ["Barbarian_Hat"]],
 	"lurtz": ["Rogue", ["2H_Crossbow"], Color(0.4, 0.36, 0.34), 1.35, "ranged", []],
-	"saruman": ["Mage", ["2H_Staff"], Color(1, 1, 1), 1.25, "cast", []],
+	"saruman": ["Mage", ["2H_Staff"], Color(1, 1, 1), 1.25, "cast", []],  # robes whitened below
+	"boromir": ["Knight", ["1H_Sword", "Badge_Shield"], Color(0.95, 0.92, 1.0), 1.3, "melee", []],
+	"faramir": ["Rogue_Hooded", ["2H_Crossbow"], Color(0.6, 0.75, 0.55), 1.25, "ranged", []],
+	"eomer": ["Knight", ["1H_Sword", "Round_Shield"], Color(1.0, 0.88, 0.62), 1.3, "melee", []],
+	"eowyn": ["Rogue", ["Knife"], Color(1.0, 0.95, 0.85), 1.2, "melee", []],
+	# the Witch-king: black armour and no face under the helm
+	"witch_king": ["Knight", ["1H_Sword", "Spike_Shield"], Color(0.2, 0.2, 0.23), 1.45, "melee", ["Knight_Head"]],
+	"shelob": ["spider", [], Color(0.16, 0.14, 0.13), 2.2, "", []],
+	"ugluk": ["Barbarian", ["1H_Axe", "Barbarian_Round_Shield"], URUK, 1.4, "melee", ["Barbarian_Hat"]],
 }
+
+# meshes painted a flat colour instead of their texture (Saruman the White)
+const RECOLOR = {
+	"saruman": {
+		"Mage_Hat": Color(0.93, 0.93, 0.9), "Mage_Cape": Color(0.88, 0.88, 0.86),
+		"Mage_Body": Color(0.95, 0.95, 0.93), "Mage_ArmLeft": Color(0.95, 0.95, 0.93),
+		"Mage_ArmRight": Color(0.95, 0.95, 0.93), "Mage_LegLeft": Color(0.9, 0.9, 0.88),
+		"Mage_LegRight": Color(0.9, 0.9, 0.88),
+	},
+}
+# the KayKit barbarian's bear-skin hat reads as a bear, not an orc: always hidden
+const ALWAYS_HIDE = ["Barbarian_Hat"]
 
 const ANIMS = {
 	"melee": {"idle": "Idle", "walk": "Walking_A", "run": "Running_A",
@@ -96,6 +128,8 @@ const ANIMS = {
 		"attack": ["Spellcast_Shoot"]},
 	"rider": {"idle": "Sit_Chair_Idle", "walk": "Sit_Chair_Idle", "run": "Sit_Chair_Idle",
 		"attack": ["1H_Melee_Attack_Chop", "1H_Melee_Attack_Slice_Horizontal"]},
+	"rider_ranged": {"idle": "Sit_Chair_Idle", "walk": "Sit_Chair_Idle", "run": "Sit_Chair_Idle",
+		"attack": ["1H_Ranged_Shoot"]},
 	"worker": {"idle": "Idle", "walk": "Walking_A", "run": "Walking_A",
 		"attack": ["1H_Melee_Attack_Chop"], "work": "Interact"},
 }
@@ -117,6 +151,14 @@ static func unit_look(faction: String, unit_class: String) -> Array:
 	return UNITS.gondor.get(unit_class, UNITS.gondor.infantry)
 
 
+static func is_mounted(faction: String, unit_class: String) -> bool:
+	return unit_class in MOUNTED.get(faction, DEFAULT_MOUNTED)
+
+
+static func siege_kind(faction: String, unit_class: String) -> String:
+	return SIEGE.get(faction, {}).get(unit_class, "")
+
+
 static func character(model: String, props: Array, tint: Color, scale: float, hide = []) -> Node3D:
 	var node = _scene(CHAR_DIR + model + ".glb").instantiate()
 	node.name = "Model"
@@ -124,7 +166,7 @@ static func character(model: String, props: Array, tint: Color, scale: float, hi
 	node.rotation.y = PI  # KayKit faces +Z; our units face -Z
 	for mesh in node.find_children("*", "MeshInstance3D", true, false):
 		var n = String(mesh.name)
-		if (n in PROP_MESHES and not n in props) or n in hide:
+		if (n in PROP_MESHES and not n in props) or n in hide or n in ALWAYS_HIDE:
 			mesh.visible = false
 			continue
 		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -136,6 +178,15 @@ static func character(model: String, props: Array, tint: Color, scale: float, hi
 		player[0].play("Idle")
 		node.set_meta("anim", player[0])
 	return node
+
+
+static func recolor(model: Node3D, colors: Dictionary):
+	for mesh in model.find_children("*", "MeshInstance3D", true, false):
+		if colors.has(String(mesh.name)):
+			var mat = StandardMaterial3D.new()
+			mat.albedo_color = colors[String(mesh.name)]
+			mat.roughness = 0.9
+			mesh.material_override = mat
 
 
 static func ghost(model: Node3D):

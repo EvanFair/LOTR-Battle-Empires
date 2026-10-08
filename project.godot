@@ -29,6 +29,7 @@ Utils="*res://source/Utils.gd"
 GameData="*res://source/lotr/GameData.gd"
 CommandBus="*res://source/lotr/CommandBus.gd"
 Network="*res://source/lotr/net/Network.gd"
+Sfx="*res://source/lotr/audio/Sfx.gd"
 
 [debug]
 

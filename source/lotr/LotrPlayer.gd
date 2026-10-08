@@ -31,17 +31,20 @@ var team = 1
 var hero_key = "aragorn"
 var peer_id = 0  # 0 = bot, 1 = host, >1 = client
 var is_bot = false
+var is_neutral = false  # the wild creatures' owner: enemy of everyone, never wins or loses
 var age = 1
 var defeated = false
 var storehouse_ready_at = 0.0  # time (s) when a lost Storehouse may be rebuilt
 var hero = null
+var upgrades = {}  # finished Blacksmith research: key -> true
 var income = {}  # resource -> gathered in the current minute window
 var income_per_min = {}
 var _income_window_start = 0.0
 
 
 func _ready():
-	add_to_group("lotr_players")
+	if not is_neutral:
+		add_to_group("lotr_players")
 
 
 func resources() -> Dictionary:

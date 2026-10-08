@@ -140,6 +140,9 @@ func _try_teleporting_camera_based_on_local_texture_rect_position(position_2d_wi
 	if world_position_2d == null:
 		return
 	var world_position_3d = Vector3(world_position_2d.x, 0, world_position_2d.y)
+	var hero_controller = _match.get("hero_controller")
+	if hero_controller != null:
+		hero_controller.camera_locked = false  # looking elsewhere: free the camera (Space re-locks)
 	get_viewport().get_camera_3d().set_position_safely(world_position_3d)
 
 
@@ -168,3 +171,20 @@ func _on_gui_input(event):
 			_issue_movement_action(event.position)
 	elif event is InputEventMouseMotion and _camera_movement_active:
 		_try_teleporting_camera_based_on_local_texture_rect_position(event.position)
+
+
+func ping(world_position: Vector3, color: Color):
+	"""A pulsing square on the minimap where a teammate pinged."""
+	var blip = ReferenceRect.new()
+	blip.border_color = color
+	blip.border_width = 2.0
+	blip.editor_only = false
+	blip.size = Vector2(10, 10)
+	blip.pivot_offset = blip.size / 2.0
+	blip.position = Vector2(world_position.x, world_position.z) * MINIMAP_PIXELS_PER_WORLD_METER - blip.size / 2.0
+	_viewport_background.add_sibling(blip)
+	var tween = blip.create_tween()
+	for i in range(3):
+		tween.tween_property(blip, "scale", Vector2(2.5, 2.5), 0.45)
+		tween.tween_property(blip, "scale", Vector2(0.8, 0.8), 0.01)
+	tween.tween_callback(blip.queue_free)

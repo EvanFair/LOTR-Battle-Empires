@@ -210,6 +210,17 @@ func _run_step():
 			wait(GameData.VILLAGER_RESPAWN_TIME + 3)
 		19:
 			check("killed villager is replaced after the delay", house().alive_villagers().size() == GameData.VILLAGERS_PER_HOUSE)
+			# ability ranks: R can't be learned before level 6; then learn everything for the test
+			_data.toast = ""
+			CommandBus.command_rejected.connect(func(_c, reason): _data.toast = reason, CONNECT_ONE_SHOT)
+			hero().level = 1
+			hero().ranks = {}
+			cmd({"type": "learn", "key": "R"})
+			check("ultimate can't be learned at level 1", "level 6" in _data.toast, "(%s)" % _data.toast)
+			cmd({"type": "learn", "key": "E"})
+			check("learning spends a skill point", hero().ability_rank("E") == 1 and hero().skill_points() == 0)
+			hero().level = 6
+			hero().ranks = {"Q": 1, "W": 1, "E": 1, "R": 1}
 			# abilities: W rally, E dash, R army of the dead, Q execute on an enemy
 			var before = hero().global_position
 			_data.dash_from = before
@@ -237,6 +248,155 @@ func _run_step():
 				if u.player == _me and u.get("summon_expires_at") != null and u.summon_expires_at > 0:
 					ghosts += 1
 			check("summoned army disappears after its duration", ghosts == 0, "(%d left)" % ghosts)
+			# other heroes' kits: borrow Boromir's Shield Bash and the Witch-king's Black Breath
+			var enemy_owner = _enemy_hero().player
+			var dummy = _match.spawn_unit({"kind": "troop", "faction": enemy_owner.faction, "class": "infantry"}, hero().global_position + Vector3(1.5, 0, 0), enemy_owner)
+			dummy.auto_acquire = false
+			dummy.hp_max = 5000
+			dummy.hp = 5000
+			hero().hero_key = "boromir"
+			hero().cooldowns.clear()
+			hero().mana = hero().mana_max
+			var err = HeroAbilities.cast(_match, hero(), "Q", dummy.global_position, dummy)
+			check("Shield Bash stuns its target", err == "" and dummy.is_stunned(), "(%s)" % err)
+			hero().hero_key = "witch_king"
+			hero().ranks["W"] = 1
+			err = HeroAbilities.cast(_match, hero(), "W", null, null)
+			check("Black Breath slows and weakens enemies around", err == "" and dummy.speed_mult < 1.0 and dummy.damage_mult < 1.0, "(%s speed %.2f dmg %.2f)" % [err, dummy.speed_mult, dummy.damage_mult])
+			hero().hero_key = "aragorn"
+			dummy.hp = 0
+			# Recall: refused at home, works in the field, broken by moving
+			_data.toast = ""
+			CommandBus.command_rejected.connect(func(_c, reason): _data.toast = reason, CONNECT_ONE_SHOT)
+			hero().global_position = tc().global_position + Vector3(0, 0, tc().stats_size() + 1.5)
+			cmd({"type": "recall"})
+			check("Recall is refused inside the base", "home" in _data.toast, "(%s)" % _data.toast)
+			hero().global_position = tc().global_position + Vector3(GameData.BASE_RADIUS + 8, 0, 0)
+			cmd({"type": "recall"})
+			cmd({"type": "hero_move", "pos": hero().global_position + Vector3(2, 0, 0)})
+			check("moving cancels Recall", hero().recall_until == 0.0)
+			cmd({"type": "recall"})
+			wait(hero().RECALL_TIME + 0.5)
+		23:
+			check("Recall takes the hero home", _me.in_base(hero().global_position), "(%s)" % hero().global_position)
+			# --- Armies & Age III ---
+			_me.set_resources({"food": 3000, "wood": 3000, "stone": 3000, "iron": 3000, "gold": 1000})
+			_me.age = 2
+			hero().global_position = tc().global_position + Vector3(0, 0, tc().stats_size() + 1.5)
+			hero().order_stop()
+			var spot = free_spot("blacksmith", tc().global_position, 7.0, 16.0)
+			_data.smith_spot = spot
+			cmd({"type": "build", "building": "blacksmith", "pos": spot})
+			wait(0.5)
+		24:
+			var s = _site("blacksmith")
+			check("Blacksmith foundation placed", s != null)
+			if s != null:
+				hero().global_position = s.global_position + Vector3(s.stats_size() + 1.2, 0, 0)
+				hero().order_stop()
+				s.progress = 0.95  # construction itself is covered above; skip ahead
+			wait(GameData.BUILDINGS.blacksmith.build_time * 0.05 + 3)
+		25:
+			var smiths = _me.buildings("blacksmith")
+			check("Blacksmith built", not smiths.is_empty() and smiths[0].is_constructed())
+			hero().global_position = tc().global_position + Vector3(0, 0, tc().stats_size() + 1.5)
+			hero().order_stop()
+			_data.dmg_before = GameData.troop_stats(_me.faction, "infantry", _me.upgrades).damage
+			cmd({"type": "research", "upgrade": "forged_blades"})
+			_data.toast = ""
+			CommandBus.command_rejected.connect(func(_c, reason): _data.toast = reason, CONNECT_ONE_SHOT)
+			cmd({"type": "research", "upgrade": "war_drills"})
+			var smith = _me.buildings("blacksmith")[0]
+			check("research starts at the Blacksmith", smith.research_key == "forged_blades")
+			smith.research_left = 2.0
+			wait(3)
+		26:
+			check("Age III research is locked in Age II", "Requires" in _data.toast or "busy" in _data.toast, "(%s)" % _data.toast)
+			check("Forged Blades researched", _me.upgrades.get("forged_blades", false))
+			var dmg_after = GameData.troop_stats(_me.faction, "infantry", _me.upgrades).damage
+			check("upgrade raises new troops' damage", dmg_after > _data.dmg_before, "(%.1f -> %.1f)" % [_data.dmg_before, dmg_after])
+			cmd({"type": "advance_age"})
+			check("Empire Age advance starts", tc().age_target == 3)
+			tc().age_progress = 0.95
+			wait(GameData.AGES[3].time * 0.05 + 3)
+		27:
+			check("advanced to the Empire Age", _me.age == 3, "(age %d)" % _me.age)
+			var spot = free_spot("siege_works", tc().global_position, 8.0, 18.0)
+			cmd({"type": "build", "building": "siege_works", "pos": spot})
+			var special_spot = free_spot("special_building", tc().global_position, 8.0, 18.0)
+			cmd({"type": "build", "building": "special_building", "pos": special_spot})
+			wait(0.5)
+		28:
+			check("Siege Works can be placed in Age III", _site("siege_works") != null)
+			var sb = _site("special_building")
+			check("faction special building uses the faction name", sb != null and sb.display_name == GameData.SPECIAL_BUILDING_NAMES[_me.faction], "(%s)" % (sb.display_name if sb != null else "none"))
+			var grond = GameData.troop_stats("mordor", "special")
+			check("Grond is a siege unit", grond.siege and grond.squad_size == 1)
+			# an Isengard sapper blows up on a building and dies
+			var enemy = null
+			for p in _match.players_by_slot.values():
+				if Teams.is_enemy(p, _me):
+					enemy = p
+					break
+			var target = _me.buildings("blacksmith")[0]
+			_data.target = target
+			_data.target_hp = target.hp
+			var sapper = _match.spawn_unit({"kind": "troop", "faction": "isengard", "class": "special"}, target.global_position + Vector3(target.stats_size() + 1.0, 0, 0), enemy)
+			_data.sapper = sapper
+			sapper.order_attack(target)
+			wait(3)
+		29:
+			check("sapper explodes on contact", not is_instance_valid(_data.sapper) or not _data.sapper.is_alive())
+			check("sapper blast damages the building", not is_instance_valid(_data.target) or _data.target.hp < _data.target_hp, "(%d -> %s)" % [_data.target_hp, _data.target.hp if is_instance_valid(_data.target) else "destroyed"])
+			# --- the Shop ---
+			hero().global_position = tc().global_position + Vector3(0, 0, tc().stats_size() + 1.5)
+			hero().order_stop()
+			hero().items.clear()
+			hero().recompute_stats()
+			_me.gold = 2000
+			_data.dmg = hero().attack_damage
+			cmd({"type": "buy", "item": "elven_blade"})
+			check("buying an Elven Blade raises attack damage", hero().attack_damage > _data.dmg and _me.gold == 2000 - GameData.ITEMS.elven_blade.cost, "(%.0f -> %.0f, gold %d)" % [_data.dmg, hero().attack_damage, _me.gold])
+			cmd({"type": "buy", "item": "lembas"})
+			hero().hp = 100
+			cmd({"type": "use_item", "slot": 1})
+			check("Lembas heals and is used up", hero().hp > 300 and hero().items.size() == 1, "(hp %d, items %d)" % [hero().hp, hero().items.size()])
+			cmd({"type": "sell", "slot": 0})
+			check("selling refunds half", hero().items.is_empty() and _me.gold == 2000 - GameData.ITEMS.elven_blade.cost - GameData.ITEMS.lembas.cost + int(GameData.ITEMS.elven_blade.cost * GameData.SELL_REFUND), "(gold %d)" % _me.gold)
+			_data.toast = ""
+			CommandBus.command_rejected.connect(func(_c, reason): _data.toast = reason, CONNECT_ONE_SHOT)
+			hero().global_position = tc().global_position + Vector3(GameData.BASE_RADIUS + 6, 0, 0)
+			cmd({"type": "buy", "item": "lembas"})
+			check("the shop only works in your base", "base" in _data.toast, "(%s)" % _data.toast)
+			# --- the Wild ---
+			check("jungle camps and the Cave Troll are on the map", _match.camps.size() == MapGen.camp_sites().size() and _match.camps.any(func(c): return c.key == "troll"))
+			var camp = null
+			for c in _match.camps:
+				if c.key == "spiders":
+					camp = c
+					break
+			_data.camp = camp
+			hero().global_position = camp.pos + Vector3(4.0, 0, 0)
+			hero().order_stop()
+			_data.spider = camp.members[0]
+			cmd({"type": "hero_attack", "target": _data.spider.net_id})
+			wait(2.0)
+		30:
+			var camp = _data.camp
+			var fighting = camp.members.filter(func(m): return is_instance_valid(m) and m.is_alive() and m.order_target == hero())
+			check("striking one spider turns the whole camp on you", fighting.size() == camp.members.size(), "(%d/%d)" % [fighting.size(), camp.members.size()])
+			# drag them away: they give up past the leash range and heal
+			hero().order_stop()
+			hero().global_position = camp.pos + Vector3(GameData.LEASH_RANGE + 10.0, 0, 0)
+			wait(8.0)
+		31:
+			var camp = _data.camp
+			var home = camp.members.filter(func(m): return is_instance_valid(m) and m.is_alive() and m.global_position.distance_to(camp.pos) < 4.0 and m.hp == m.hp_max)
+			check("pulled creatures leash back home and heal", home.size() == camp.members.size(), "(%d/%d home at full health)" % [home.size(), camp.members.size()])
+			_data.gold_before = _me.gold
+			for m in camp.members:
+				Combat.deal_damage(hero(), m, 99999, true)
+			check("clearing a camp pays Gold", _me.gold >= _data.gold_before + 3 * GameData.CREATURES.spider.gold, "(%d -> %d)" % [_data.gold_before, _me.gold])
 			_finish()
 
 

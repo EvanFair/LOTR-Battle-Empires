@@ -16,6 +16,7 @@ const BotScript = preload("res://source/lotr/BotBrain.gd")
 const INNER_TOWER_DISTANCE = 7.5
 const OUTER_TOWER_DISTANCE = 18.0
 const WIN_CHECK_INTERVAL = 1.0
+const NEUTRAL_SLOT = -1
 
 var match_settings = {}  # {"slots": [...], "seed": int}
 var players_by_slot = {}
@@ -27,6 +28,8 @@ var hero_controller = null
 var ended = false
 var started = false
 var winning_team = -1
+var neutral_player = null
+var camps = []  # host: {key, pos, members, respawn_at}
 
 var _next_net_id = 1
 var _next_squad_id = 1
@@ -54,6 +57,7 @@ func _ready():
 	_squads_root.name = "Squadrons"
 	add_child(_squads_root)
 	_create_players()
+	_create_neutral_player()
 	_register_resources()
 	_register_commands()
 	replicator = ReplicatorScript.new()
@@ -74,6 +78,9 @@ func _ready():
 	Network.peer_left.connect(_on_peer_left)
 	Network.host_left.connect(_on_host_left)
 	MatchSignals.match_started.emit()
+	Sfx.play_music("battle")
+	if local_player != null:
+		Sfx.play("drums" if GameData.FACTIONS[local_player.faction].side == "shadow" else "horn")
 
 
 # --- look and feel ----------------------------------------------------------------------------
@@ -135,6 +142,7 @@ func _setup_atmosphere():
 func _start_host_simulation():
 	await replicator.wait_for_clients()
 	_spawn_bases()
+	_spawn_camps()
 	_attach_bots()
 	started = true
 
@@ -190,7 +198,22 @@ func _create_players():
 
 
 func player_for_slot(slot):
+	if int(slot) == NEUTRAL_SLOT:
+		return neutral_player
 	return players_by_slot.get(int(slot))
+
+
+func _create_neutral_player():
+	var p = LotrPlayerScript.new()
+	p.name = "Wild"
+	p.is_neutral = true
+	p.slot_index = NEUTRAL_SLOT
+	p.player_name = "The Wild"
+	p.faction = "wild"
+	p.team = 0
+	p.color = Color(0.55, 0.5, 0.42)
+	_players.add_child(p)
+	neutral_player = p
 
 
 func _owner_check(player_index, peer_id) -> bool:
@@ -249,6 +272,57 @@ func _spawn_bases():
 		)
 		hero.home_position = hero.global_position
 		p.hero = hero
+
+
+# --- the wild (host) ------------------------------------------------------------------------------
+func _spawn_camps():
+	for site in MapGen.camp_sites():
+		var camp = {"key": site.camp, "pos": site.pos, "members": [], "respawn_at": -1.0}
+		camps.append(camp)
+		_populate_camp(camp)
+
+
+func _populate_camp(camp):
+	var kinds = GameData.CAMPS[camp.key].creatures
+	camp.members = []
+	for i in range(kinds.size()):
+		var angle = TAU * i / kinds.size()
+		var spot = camp.pos + (Vector3(cos(angle), 0, sin(angle)) * 1.8 if kinds.size() > 1 else Vector3.ZERO)
+		var c = spawn_unit({"kind": "creature", "creature": kinds[i]}, spot, neutral_player, {"yaw": randf() * TAU})
+		c.anchor = camp.pos
+		c.home_spot = spot
+		c.camp = camp
+		camp.members.append(c)
+	camp.respawn_at = -1.0
+
+
+func _camps_tick():
+	var now = GameData.now()
+	for camp in camps:
+		var alive = camp.members.filter(func(m): return is_instance_valid(m) and m.is_alive())
+		if not alive.is_empty():
+			continue
+		if camp.respawn_at < 0.0:
+			camp.respawn_at = now + GameData.CAMPS[camp.key].respawn
+		elif now >= camp.respawn_at:
+			_populate_camp(camp)
+
+
+func on_creature_slain(creature, killer_player):
+	"""Called by Combat when a creature dies to a player's unit (host)."""
+	var data = GameData.CREATURES[creature.creature_key]
+	if data.has("team_gold"):
+		for p in players_by_slot.values():
+			if Teams.is_ally(p, killer_player):
+				p.add_resources({"gold": data.team_gold})
+	if data.has("buff"):
+		var buff = data.buff
+		for u in get_tree().get_nodes_in_group("units"):
+			if u.is_alive() and u.unit_kind in ["hero", "troop"] and Teams.is_ally(u.player, killer_player):
+				u.apply_buff(buff.stat, buff.mult, buff.duration)
+		broadcast_toast("%s's team slew the %s! %s: +%d%% damage for %ds" % [
+			killer_player.player_name, data.name, buff.name, int((buff.mult - 1.0) * 100), int(buff.duration)])
+		fx("horn", creature.global_position, creature.global_position)
 
 
 func spawn_building(p, key: String, position: Vector3, under_construction = true):
@@ -325,7 +399,7 @@ func by_net_id(net_id):
 
 
 func spawn_squadron(p, unit_class: String, building, lane_index: int):
-	var stats = GameData.troop_stats(p.faction, unit_class)
+	var stats = GameData.troop_stats(p.faction, unit_class, p.upgrades)
 	var front = building.global_position
 	var center = Vector3(MapGen.SIZE / 2.0, 0, MapGen.SIZE / 2.0)
 	var out_dir = (center - front).normalized()
@@ -334,7 +408,10 @@ func spawn_squadron(p, unit_class: String, building, lane_index: int):
 	for i in range(stats.squad_size):
 		var offset = Vector3((i % 4) - 1.5, 0, int(i / 4)) * 1.1
 		units.append(
-			spawn_unit({"kind": "troop", "faction": p.faction, "class": unit_class}, front + offset, p)
+			spawn_unit(
+				{"kind": "troop", "faction": p.faction, "class": unit_class, "upgrades": p.upgrades.duplicate()},
+				front + offset, p
+			)
 		)
 	var squad = make_squadron(p, unit_class, units, building.global_position)
 	if lane_index >= 0 and lane_index < lanes.size():
@@ -383,6 +460,14 @@ func _register_commands():
 	CommandBus.register("hero_move", _cmd_hero_move)
 	CommandBus.register("hero_attack", _cmd_hero_attack)
 	CommandBus.register("hero_stop", _cmd_hero_stop)
+	CommandBus.register("hero_attack_move", _cmd_hero_attack_move)
+	CommandBus.register("hero_hold", _cmd_hero_hold)
+	CommandBus.register("recall", _cmd_recall)
+	CommandBus.register("ping", _cmd_ping)
+	CommandBus.register("learn", _cmd_learn)
+	CommandBus.register("buy", _cmd_buy)
+	CommandBus.register("sell", _cmd_sell)
+	CommandBus.register("use_item", _cmd_use_item)
 	CommandBus.register("cast", _cmd_cast)
 	CommandBus.register("squad_order", _cmd_squad_order)
 	CommandBus.register("assign_villagers", _cmd_assign_villagers)
@@ -391,6 +476,7 @@ func _register_commands():
 	CommandBus.register("set_auto_repeat", _cmd_set_auto_repeat)
 	CommandBus.register("train", _cmd_train)
 	CommandBus.register("advance_age", _cmd_advance_age)
+	CommandBus.register("research", _cmd_research)
 
 
 func _hero_of(cmd):
@@ -432,12 +518,84 @@ func _cmd_hero_stop(cmd):
 	return ""
 
 
+func _cmd_hero_attack_move(cmd):
+	var hero = _alive_hero(cmd)
+	if hero == null:
+		return "Your hero is dead"
+	hero.order_attack_move(cmd.pos)
+	return ""
+
+
+func _cmd_buy(cmd):
+	var err = _base_panel_check(cmd)
+	if err != "":
+		return "Return to your base to shop" if err.begins_with("Return") else err
+	return _alive_hero(cmd).buy_item(cmd.get("item", ""))
+
+
+func _cmd_sell(cmd):
+	var err = _base_panel_check(cmd)
+	if err != "":
+		return "Return to your base to shop" if err.begins_with("Return") else err
+	return _alive_hero(cmd).sell_item(int(cmd.get("slot", -1)))
+
+
+func _cmd_use_item(cmd):
+	var hero = _alive_hero(cmd)
+	if hero == null:
+		return "Your hero is dead"
+	return hero.use_item(int(cmd.get("slot", -1)))
+
+
+func _cmd_learn(cmd):
+	var hero = _hero_of(cmd)
+	if hero == null:
+		return ""
+	return hero.learn(cmd.get("key", ""))
+
+
+func _cmd_hero_hold(cmd):
+	var hero = _alive_hero(cmd)
+	if hero != null:
+		hero.order_hold()
+	return ""
+
+
+func _cmd_recall(cmd):
+	var hero = _alive_hero(cmd)
+	if hero == null:
+		return "Your hero is dead"
+	if hero.player.in_base(hero.global_position):
+		return "You are already home"
+	hero.start_recall()
+	return ""
+
+
+func _cmd_ping(cmd):
+	var p = player_for_slot(cmd.player)
+	if p == null:
+		return ""
+	var kind = "danger" if cmd.get("danger", false) else "ping"
+	for other in players_by_slot.values():
+		if Teams.is_ally(other, p):
+			if other == local_player:
+				hud.show_ping(cmd.pos, kind, p)
+			elif other.peer_id > 1 and Network.is_online():
+				replicator.send_ping(other.peer_id, cmd.pos, kind, p.slot_index)
+	return ""
+
+
 func _cmd_cast(cmd):
 	var hero = _alive_hero(cmd)
 	if hero == null:
 		return "Your hero is dead"
+	hero.cancel_recall()
 	var target = by_net_id(cmd.get("target", 0)) if cmd.get("target", 0) else null
-	return HeroAbilities.cast(self, hero, cmd.key, cmd.get("pos"), target)
+	var err = HeroAbilities.cast(self, hero, cmd.key, cmd.get("pos"), target)
+	if err == "Target is out of range" and target != null:
+		hero.queue_cast(cmd.key, target)  # walk into range, then cast (MOBA convention)
+		return ""
+	return err
 
 
 func _cmd_squad_order(cmd):
@@ -569,8 +727,8 @@ func _cmd_advance_age(cmd):
 		return err
 	var p = player_for_slot(cmd.player)
 	var target = p.age + 1
-	if not GameData.AGES.has(target) or target > 2:
-		return "No further Ages yet"
+	if not GameData.AGES.has(target):
+		return "You have reached the final Age"
 	var tc = p.town_centers()
 	if tc.is_empty():
 		return "You need a Town Center"
@@ -584,6 +742,31 @@ func _cmd_advance_age(cmd):
 	return ""
 
 
+func _cmd_research(cmd):
+	var err = _base_panel_check(cmd)
+	if err != "":
+		return err
+	var p = player_for_slot(cmd.player)
+	var key = cmd.get("upgrade", "")
+	if not GameData.UPGRADES.has(key):
+		return ""
+	var data = GameData.UPGRADES[key]
+	if p.upgrades.get(key, false):
+		return "Already researched"
+	if data.age > p.age:
+		return "Requires the %s Age" % GameData.AGE_NAMES[data.age]
+	var smiths = p.buildings("blacksmith").filter(func(b): return b.is_constructed())
+	if smiths.is_empty():
+		return "Build a Blacksmith first"
+	if smiths[0].research_key != "":
+		return "The Blacksmith is busy"
+	if not p.has_resources(data.cost):
+		return p.missing_text(data.cost)
+	p.subtract_resources(data.cost)
+	smiths[0].start_research(key)
+	return ""
+
+
 # --- win condition (host) ---------------------------------------------------------------------
 func _physics_process(delta):
 	if ended or not started or not is_host():
@@ -592,6 +775,7 @@ func _physics_process(delta):
 	if _win_check_left > 0.0:
 		return
 	_win_check_left = WIN_CHECK_INTERVAL
+	_camps_tick()
 	for p in players_by_slot.values():
 		if not p.defeated and p.town_centers().is_empty():
 			_defeat(p)

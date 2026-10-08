@@ -103,6 +103,11 @@ func send_toast(peer_id: int, text: String):
 		_rpc_toast.rpc_id(peer_id, text)
 
 
+func send_ping(peer_id: int, pos: Vector3, kind: String, from_slot: int):
+	if _is_online() and _match.is_host():
+		_rpc_ping.rpc_id(peer_id, pos, kind, from_slot)
+
+
 func send_match_over(team: int):
 	if _is_online() and _match.is_host():
 		_rpc_match_over.rpc(team)
@@ -160,7 +165,7 @@ func _send_slow():
 			{
 				"slot": p.slot_index, "res": p.resources(), "age": p.age, "defeated": p.defeated,
 				"store_cd": max(0.0, p.storehouse_ready_at - now), "income": p.income_per_min,
-				"bot": p.is_bot,
+				"bot": p.is_bot, "upgrades": p.upgrades,
 			}
 		)
 	var heroes = []
@@ -172,7 +177,9 @@ func _send_slow():
 			{
 				"id": h.net_id, "level": h.level, "xp": h.xp, "mana": h.mana, "mana_max": h.mana_max,
 				"hp_max": h.hp_max, "dead": h.dead, "respawn": max(0.0, h.respawn_at - now),
-				"cds": cds,
+				"cds": cds, "recall": h.recall_left(), "ranks": h.ranks,
+				"stun": max(0.0, h.stunned_until - now),
+				"items": h.items.map(func(it): return [it.key, max(0.0, it.ready_at - now)]),
 			}
 		)
 	var buildings = []
@@ -185,6 +192,7 @@ func _send_slow():
 				"incoming": b.incoming, "assign": b.assignment,
 				"villagers": b.alive_villagers().size() if b.building_key == "village_house" else 0,
 				"respawn": b.respawn_left, "age_target": b.age_target, "age_progress": b.age_progress,
+				"research": b.research_key, "research_left": b.research_left,
 			}
 		)
 	var squad_list = []
@@ -268,6 +276,7 @@ func _rpc_slow(players, heroes, buildings, squad_list, resources):
 		p.storehouse_ready_at = now + pd.store_cd
 		p.income_per_min = pd.income
 		p.is_bot = pd.bot
+		p.upgrades = pd.upgrades
 	for hd in heroes:
 		var h = _match.by_net_id(hd.id)
 		if h == null:
@@ -281,6 +290,10 @@ func _rpc_slow(players, heroes, buildings, squad_list, resources):
 		for key in hd.cds:
 			h.cooldowns[key] = now + hd.cds[key]
 		h.set_dead(hd.dead)
+		h.recall_until = now + hd.recall if hd.recall > 0.0 else 0.0
+		h.ranks = hd.ranks
+		h.stunned_until = now + hd.stun
+		h.items = hd.items.map(func(it): return {"key": it[0], "ready_at": now + it[1]})
 	for bd in buildings:
 		var b = _match.by_net_id(bd.id)
 		if b == null:
@@ -304,6 +317,8 @@ func _rpc_slow(players, heroes, buildings, squad_list, resources):
 		b.respawn_left = bd.respawn
 		b.age_target = bd.age_target
 		b.age_progress = bd.age_progress
+		b.research_key = bd.research
+		b.research_left = bd.research_left
 	squads.clear()
 	for s in squad_list:
 		squads[s.id] = s
@@ -316,6 +331,11 @@ func _rpc_slow(players, heroes, buildings, squad_list, resources):
 @rpc("authority", "reliable")
 func _rpc_toast(text):
 	_match.toast.emit(text)
+
+
+@rpc("authority", "reliable")
+func _rpc_ping(pos, kind, from_slot):
+	_match.hud.show_ping(pos, kind, _match.player_for_slot(from_slot))
 
 
 @rpc("authority", "reliable")

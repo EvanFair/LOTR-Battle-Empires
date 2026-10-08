@@ -58,6 +58,16 @@ func key(code):
 		await _frames(1)
 
 
+func key_state(code, pressed: bool, ctrl = false):
+	var e = InputEventKey.new()
+	e.physical_keycode = code
+	e.keycode = code
+	e.pressed = pressed
+	e.ctrl_pressed = ctrl
+	Input.parse_input_event(e)
+	await _frames(1)
+
+
 func click(pos: Vector2, button = MOUSE_BUTTON_LEFT):
 	get_viewport().warp_mouse(pos)
 	await _frames(2)
@@ -170,13 +180,62 @@ func _run():
 	check("left-click places foundation", me.buildings("village_house").size() == houses_before + 1)
 	await shot("foundation")
 
-	# abilities: E dash toward cursor
+	# shop: buy Lembas from the Shop tab, use it with 5
+	me.add_resources({"gold": 200})
+	await _frames(3)
+	check("shop sells Lembas", press_button_with_text(m.hud._shop_tab, "Lembas"))
+	await _frames(3)
+	check("bought item lands in slot 5", hero.items.size() == 1 and hero.items[0].key == "lembas")
+	await shot("shop")
+	await key(KEY_5)
+	await _frames(3)
+	check("5 uses the item", hero.items.is_empty())
+	await key(KEY_B)  # close the base panel
+
+	# abilities: Ctrl+E learns, holding E shows the aim, releasing dashes toward the cursor
+	await key_state(KEY_E, true, true)
+	await key_state(KEY_E, false, true)
+	await _frames(3)
+	check("Ctrl+E learns Ranger's Dash", hero.ability_rank("E") == 1)
 	var h0 = hero.global_position
 	get_viewport().warp_mouse(world_to_screen(h0 + Vector3(5, 0, 0)))
 	await _frames(2)
-	await key(KEY_E)
+	await key_state(KEY_E, true)
+	await _frames(3)
+	check("holding E shows the aim indicator", m.hero_controller.indicators._range_ring.visible and m.hero_controller.indicators._aim_line.visible)
+	await shot("aim_dash")
+	await key_state(KEY_E, false)
 	await _seconds(0.5)
-	check("E (dash) moves hero", hero.global_position.distance_to(h0) > 2.0)
+	check("releasing E dashes the hero", hero.global_position.distance_to(h0) > 2.0)
+
+	# A + left-click: attack-move
+	await key(KEY_A)
+	await _frames(2)
+	check("A arms attack-move", m.hero_controller.mode == "attack_move")
+	await click(world_to_screen(hero.global_position + Vector3(-4, 0, 3)))
+	await _frames(3)
+	check("left-click attack-moves", hero.attack_move_target != null or hero.order == hero.Order.ATTACK)
+
+	# B outside the base starts Recall; moving cancels it
+	hero.global_position = me.town_centers()[0].global_position + Vector3(GameData.BASE_RADIUS + 6, 0, 0)
+	hero.order_stop()
+	await _frames(3)
+	await key(KEY_B)
+	await _frames(3)
+	check("B outside the base starts Recall", hero.recall_until > 0.0)
+	await _seconds(1.0)
+	await shot("recall")
+	await click(world_to_screen(hero.global_position + Vector3(2, 0, 2)), MOUSE_BUTTON_RIGHT)
+	await _frames(3)
+	check("moving cancels Recall", hero.recall_until == 0.0)
+
+	# Alt + left-click pings
+	await key_state(KEY_ALT, true)
+	await click(world_to_screen(hero.global_position + Vector3(3, 0, -3)))
+	await key_state(KEY_ALT, false)
+	await _frames(3)
+	check("Alt+click pings", m.hud.find_children("*", "Label", true, false).any(func(l): return "Look here" in l.text))
+	await shot("ping")
 	await key(KEY_Q)
 	await _frames(3)
 	await shot("q_no_target")

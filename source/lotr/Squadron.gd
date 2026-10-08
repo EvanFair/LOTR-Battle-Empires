@@ -176,16 +176,27 @@ func _valid_target():
 
 
 func _closest_enemy_near(alive, from, reach):
+	# siege squadrons (rams, trebuchets, Grond, sappers) go for buildings when any are close
+	var siege = alive[0].get("siege") == true
+	if siege:
+		reach = max(reach, alive[0].attack_range + 2.0)
 	var best = null
 	var best_d = reach
-	for other in get_tree().get_nodes_in_group("units"):
-		if not other.is_alive() or not Teams.is_enemy(player, other.player):
+	var best_building = null
+	var best_building_d = reach + 4.0
+	for other in SpatialGrid.near(get_tree(), from, max(reach, best_building_d) + 1.0):
+		if not is_instance_valid(other) or not other.is_alive() or not Teams.is_enemy(player, other.player):
 			continue
+		if Combat.is_wild(other) and other.get("order_target") == null:
+			continue  # leave the camps alone unless a creature is fighting someone
 		var d = Vector2(other.global_position.x - from.x, other.global_position.z - from.z).length()
+		if siege and other.unit_kind == "building" and d <= best_building_d:
+			best_building_d = d
+			best_building = other
 		if d <= best_d:
 			best_d = d
 			best = other
-	return best
+	return best_building if best_building != null else best
 
 
 func _engage(alive, focus):
@@ -195,7 +206,9 @@ func _engage(alive, focus):
 			continue
 		if state == State.HOLD:
 			continue  # holding units only shoot what's in range (handled by the unit itself)
-		var own = Combat.closest_enemy(m, m.global_position, m.attack_range + 3.0)
+		var own = null
+		if not (m.get("siege") == true and focus.unit_kind == "building"):
+			own = Combat.closest_enemy(m, m.global_position, m.attack_range + 3.0)
 		m.order_attack(own if own != null else focus)
 
 
