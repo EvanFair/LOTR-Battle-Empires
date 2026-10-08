@@ -87,7 +87,7 @@ In code, FFA is simply "each player is their own team", so supporting both modes
 ### Stockpile, Storehouse and hauling
 - **One stockpile.** Your Food, Wood, Stone, Iron and Gold are single totals. There is no "how much is in which building".
 - **Access points.** The **Town Center** is always one. From **Age II** you can build **one Storehouse** anywhere in your base. Villagers drop gathered resources at the nearest access point, so a Storehouse next to the forest or mine shortens their trips.
-- **The risk:** if your Storehouse is destroyed, **every resource in your stockpile is halved**. You can rebuild it, but the loss is permanent. That makes it a juicy raid target and a reason to wall and tower it.
+- **The risk:** if your Storehouse is destroyed, **every resource in your stockpile is halved**. You can rebuild it after a **2-minute cooldown**, but the lost resources don't come back. That makes it a juicy raid target and a reason to wall and tower it.
 - **Hauling (automatic).** Buildings and Age advances are paid straight from the stockpile. **Squadrons are different:** a military building trains only once its **supply** for the next squad has been carried to it.
   - When a building needs supply, the next villagers who drop off at an access point pick up a load (10 units) and carry it to that building, then return to gathering. You don't assign this; it happens on its own.
   - The cost is taken from the stockpile at pickup, so goods on the road are safe from a Storehouse loss but **lost if the villager is killed**.
@@ -252,7 +252,7 @@ Scope decision: REDUCED for M1 (jungle, shop and 3 heroes' full kits moved to M2
 ### M1 steps (in order)
 **Friday night: foundation and networking first**
 1. Copy open-rts into the repo (keeping `LICENSE-open-rts`), rename it, and disable the air units. Get it running.
-2. Switch to the Mobile renderer. **Benchmark 150 units** on the laptop.
+2. Switch to the Mobile renderer. **Benchmark 150 units**: at least 45 FPS at 1080p on a mid-range laptop.
 3. Add the Command Bus and route the existing orders through it.
 4. **Networking skeleton:** host and join (LAN discovery plus IP fallback), with commands going to the host by RPC and unit state syncing back. **Test:** two copies of the game on one laptop, then two laptops, both seeing the same units move. _Networking goes in before gameplay so every feature after it is built and tested in multiplayer from the start._
 
@@ -344,8 +344,8 @@ Risk: MEDIUM-HIGH (LAN plus everything else is a full 3 days)
 - **Towers anywhere**; one Storehouse from Age II that halves the stockpile when destroyed; **villagers haul supplies to military buildings automatically**.
 - **LAN multiplayer this weekend.** The jungle, the shop and 3 heroes' full kits move to M2.
 - Théoden uses the **KayKit stand-in**.
+- **Storehouse rebuild cooldown:** 2 minutes after it's destroyed.
+- **A player leaves mid-match:** a bot takes over their faction.
+- **Target hardware:** a standard mid-range laptop (for example, Intel Iris Xe or AMD Radeon integrated graphics, or an entry-level GPU like a GTX 1650; 8–16 GB RAM). Goal: **60 FPS at 1080p in normal play, never below 45 FPS with 150 units fighting.**
 
-## Open questions (defaults in **bold**; answer whenever)
-1. **Rebuilding the Storehouse:** can you rebuild it right away after losing it, or only after a cooldown? Default: **after a 2-minute cooldown**.
-2. **Player leaves mid-match:** does a bot take over their faction, or are they eliminated? Default: **a bot takes over**.
-3. **Laptop for testing:** what is the weakest laptop it needs to run on (for example, "a 2019 MacBook Air" or "Intel integrated graphics")? This sets the performance target in step 2.
+No open questions remain. The plan is ready to build.
