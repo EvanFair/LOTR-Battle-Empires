@@ -205,7 +205,7 @@ static func _finish_mobile(unit, stats, bar_height):
 	movement.path_height_offset = 0.5
 	movement.path_max_distance = 0.51
 	movement.neighbor_distance = 4.0
-	movement.max_neighbors = 12
+	movement.max_neighbors = 6  # cheaper avoidance; plenty for small squads
 	movement.time_horizon_agents = 1.5
 	unit.add_child(movement)
 	_common_traits(unit, radius + 0.15, bar_height)

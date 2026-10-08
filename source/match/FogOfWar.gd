@@ -27,7 +27,13 @@ func _ready():
 	find_child("EditorOnlyCircle").queue_free()
 
 
+var _frame_counter = 0
+
+
 func _physics_process(_delta):
+	_frame_counter += 1
+	if _frame_counter % 3 != 0:
+		return  # 20 Hz keeps the fog smooth enough
 	var units_synced = {}
 	var units_to_sync = get_tree().get_nodes_in_group("revealed_units")
 	for unit in units_to_sync:

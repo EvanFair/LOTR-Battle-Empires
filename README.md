@@ -51,7 +51,7 @@ The full reasoning, and how other open-source MOBAs do it, is in [docs/CONTROLS.
 
 ### How a match works
 
-- **Economy:** each Village House holds 5 villagers. Assign each house to Food, Wood, Stone or Iron; more houses on a resource means it comes in faster. Herds of game regrow; forests, quarries and mines run out. A killed villager is replaced after 45s for 50 Food. **Gold** comes from kills and from clearing jungle camps.
+- **Economy:** each Village House holds 3 villagers. Assign each house to Food, Wood, Stone or Iron; more houses on a resource means it comes in faster. Herds of game regrow; forests, quarries and mines run out. A killed villager is replaced after 45s for 50 Food. **Gold** comes from kills and from clearing jungle camps.
 - **Building:** only heroes build. Place a building from the base panel, then **stand next to it** while the timer runs. If you leave, it pauses. An enemy hero nearby also pauses it. Two heroes build 1.5× faster. Watchtowers can go anywhere; everything else goes inside your base.
 - **Ages:** advance at the Town Center (your hero must stay there).
   - **Kingdom Age** unlocks the Archery Range, Stables, Storehouse and Blacksmith.

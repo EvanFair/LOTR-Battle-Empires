@@ -14,12 +14,12 @@ const BUILD_RANGE = 8.0  # hero must stay this close for construction to progres
 const BASE_RADIUS = 22.0  # building zone around a Town Center
 const MULTI_HERO_BUILD_SPEED = 1.5
 const AUTO_REPEAT_INTERVAL = 60.0
-const VILLAGERS_PER_HOUSE = 5
+const VILLAGERS_PER_HOUSE = 3  # kept small so a mid-range laptop can run 4 full bases
 const MAX_HOUSES = 10
 const VILLAGER_RESPAWN_TIME = 45.0
 const VILLAGER_RESPAWN_COST = {"food": 50}
-const VILLAGER_CARRY = 10
-const HAUL_LOAD = 10
+const VILLAGER_CARRY = 16
+const HAUL_LOAD = 16
 const STOREHOUSE_REBUILD_COOLDOWN = 120.0
 const STOREHOUSE_LOSS_FACTOR = 0.5
 const CONSTRUCTION_REFUND = 0.75
@@ -49,19 +49,19 @@ const CLASS_STATS = {
 	"infantry":
 	{
 		"hp": 90, "damage": 9, "interval": 1.0, "range": 1.4, "speed": 2.6, "sight": 8.0,
-		"squad_size": 8, "cost": {"food": 150, "iron": 40}, "building": "barracks",
+		"squad_size": 5, "cost": {"food": 150, "iron": 40}, "building": "barracks",
 		"radius": 0.35, "ranged": false,
 	},
 	"archer":
 	{
 		"hp": 60, "damage": 8, "interval": 1.4, "range": 7.0, "speed": 2.5, "sight": 10.0,
-		"squad_size": 8, "cost": {"food": 120, "wood": 100}, "building": "archery_range",
+		"squad_size": 5, "cost": {"food": 120, "wood": 100}, "building": "archery_range",
 		"radius": 0.35, "ranged": true,
 	},
 	"rider":
 	{
 		"hp": 130, "damage": 12, "interval": 1.2, "range": 1.6, "speed": 4.6, "sight": 10.0,
-		"squad_size": 6, "cost": {"food": 180, "iron": 100}, "building": "stables",
+		"squad_size": 4, "cost": {"food": 180, "iron": 100}, "building": "stables",
 		"radius": 0.55, "ranged": false,
 	},
 	"heavy":
@@ -73,7 +73,7 @@ const CLASS_STATS = {
 	"special":
 	{
 		"hp": 150, "damage": 16, "interval": 1.2, "range": 5.0, "speed": 3.2, "sight": 11.0,
-		"squad_size": 4, "cost": {"food": 200, "iron": 120, "gold": 60}, "building": "special_building",
+		"squad_size": 3, "cost": {"food": 200, "iron": 120, "gold": 60}, "building": "special_building",
 		"radius": 0.4, "ranged": true,
 	},
 }
@@ -202,9 +202,9 @@ const HEROES = {
 			{"key": "E", "name": "Ranger's Dash", "kind": "dash", "cooldown": 10.0,
 				"mana": 30, "distance": 8.0, "desc": "Dash toward the cursor."},
 			{"key": "R", "name": "Army of the Dead", "kind": "summon", "cooldown": 90.0,
-				"mana": 120, "unit_class": "infantry", "count": 8, "duration": 15.0,
+				"mana": 120, "unit_class": "infantry", "count": 5, "duration": 15.0,
 				"summon_name": "Army of the Dead", "range": 8.0,
-				"desc": "Raise 8 spectral warriors for 15s."},
+				"desc": "Raise 5 spectral warriors for 15s."},
 		],
 	},
 	"boromir":
@@ -245,9 +245,9 @@ const HEROES = {
 				"mana": 50, "range": 13.0, "width": 1.0, "damage": 95, "root": 1.0,
 				"desc": "A long arrow that pins the first enemy hit."},
 			{"key": "R", "name": "Rangers of Ithilien", "kind": "summon", "cooldown": 85.0,
-				"mana": 120, "unit_class": "special", "count": 5, "duration": 25.0,
+				"mana": 120, "unit_class": "special", "count": 3, "duration": 25.0,
 				"summon_name": "Rangers of Ithilien", "range": 8.0,
-				"desc": "Call 5 Rangers to fight for 25s."},
+				"desc": "Call 3 Rangers to fight for 25s."},
 		],
 	},
 	# --- Rohan --------------------------------------------------------------------------------
@@ -281,9 +281,9 @@ const HEROES = {
 				"range": 10.0, "width": 1.0, "damage": 75, "slow": 0.6, "slow_time": 2.0,
 				"desc": "Hurl a spear; the first enemy hit is slowed."},
 			{"key": "W", "name": "Riders of the Mark", "kind": "summon", "cooldown": 45.0,
-				"mana": 80, "unit_class": "rider", "count": 4, "duration": 20.0,
+				"mana": 80, "unit_class": "rider", "count": 3, "duration": 20.0,
 				"summon_name": "Riders of the Mark", "range": 8.0,
-				"desc": "Summon 4 Rohirrim for 20s."},
+				"desc": "Summon 3 Rohirrim for 20s."},
 			{"key": "E", "name": "Charge", "kind": "leap", "cooldown": 11.0, "mana": 45,
 				"distance": 8.0, "radius": 2.5, "damage": 45, "stun": 0.5,
 				"desc": "Charge to a point, knocking down enemies where you land."},
@@ -323,8 +323,8 @@ const HEROES = {
 			{"key": "Q", "name": "Cleave", "kind": "nova", "cooldown": 8.0, "mana": 35,
 				"radius": 3.0, "damage": 50, "desc": "Hit every enemy around you."},
 			{"key": "W", "name": "Warg Pack", "kind": "summon", "cooldown": 45.0, "mana": 80,
-				"unit_class": "rider", "count": 4, "duration": 20.0, "summon_name": "Wargs",
-				"range": 8.0, "desc": "Loose 4 wargs for 20s."},
+				"unit_class": "rider", "count": 3, "duration": 20.0, "summon_name": "Wargs",
+				"range": 8.0, "desc": "Loose 3 wargs for 20s."},
 			{"key": "E", "name": "The Age of Men Is Over", "kind": "rally_aura", "cooldown": 22.0,
 				"mana": 60, "radius": 14.0, "duration": 8.0, "stat": "attack_speed", "mult": 1.35,
 				"desc": "Nearby orcs attack 35% faster."},
@@ -430,8 +430,8 @@ const HEROES = {
 			{"key": "E", "name": "Hunter's Stride", "kind": "dash", "cooldown": 10.0, "mana": 30,
 				"distance": 7.0, "desc": "Dash toward the cursor."},
 			{"key": "R", "name": "Uruk Ambush", "kind": "summon", "cooldown": 85.0, "mana": 120,
-				"unit_class": "infantry", "count": 6, "duration": 22.0, "summon_name": "Uruk-hai",
-				"range": 8.0, "desc": "Six Uruk-hai join the fight for 22s."},
+				"unit_class": "infantry", "count": 4, "duration": 22.0, "summon_name": "Uruk-hai",
+				"range": 8.0, "desc": "Four Uruk-hai join the fight for 22s."},
 		],
 	},
 }
@@ -511,14 +511,14 @@ const UNIT_OVERRIDES = {
 		"heavy": {"hp": 260, "damage": 70, "interval": 4.0, "range": 14.0, "speed": 1.3,
 			"ranged": true, "siege": true, "squad_size": 2, "counter_as": "heavy", "radius": 1.0},
 		"special": {"hp": 110, "damage": 15, "interval": 1.2, "range": 9.5, "speed": 3.0,
-			"ranged": true, "squad_size": 5, "counter_as": "archer", "sight": 13.0},
+			"ranged": true, "squad_size": 3, "counter_as": "archer", "sight": 13.0},
 	},
 	"rohan":
 	{
 		"heavy": {"hp": 320, "damage": 26, "interval": 1.4, "range": 1.8, "speed": 4.0,
-			"ranged": false, "squad_size": 4, "counter_as": "rider", "armor": 0.25, "radius": 0.55},
+			"ranged": false, "squad_size": 3, "counter_as": "rider", "armor": 0.25, "radius": 0.55},
 		"special": {"hp": 120, "damage": 11, "interval": 1.3, "range": 7.0, "speed": 4.6,
-			"ranged": true, "squad_size": 5, "counter_as": "archer", "radius": 0.55},
+			"ranged": true, "squad_size": 3, "counter_as": "archer", "radius": 0.55},
 	},
 	"mordor":
 	{
@@ -534,7 +534,7 @@ const UNIT_OVERRIDES = {
 			"ranged": false, "siege": true, "squad_size": 1, "counter_as": "heavy",
 			"armor": 0.3, "radius": 1.0},
 		"special": {"hp": 140, "damage": 320, "interval": 1.0, "range": 1.8, "speed": 3.4,
-			"ranged": false, "siege": true, "explode": true, "squad_size": 3,
+			"ranged": false, "siege": true, "explode": true, "squad_size": 2,
 			"counter_as": "heavy"},
 	},
 }
@@ -545,7 +545,7 @@ const UPGRADES = {
 		"cost": {"iron": 150, "gold": 30}, "time": 45.0, "age": 2},
 	"plated_armour": {"name": "Plated Armour", "desc": "Troops take 12% less damage",
 		"cost": {"iron": 200, "gold": 40}, "time": 50.0, "age": 2},
-	"war_drills": {"name": "War Drills", "desc": "+2 soldiers in infantry and archer squadrons",
+	"war_drills": {"name": "War Drills", "desc": "+1 soldier in infantry and archer squadrons",
 		"cost": {"food": 300, "gold": 60}, "time": 60.0, "age": 3},
 	"master_smiths": {"name": "Master Smiths", "desc": "+15% damage and +10% HP for all troops",
 		"cost": {"iron": 350, "gold": 120}, "time": 75.0, "age": 3},
@@ -684,7 +684,7 @@ func troop_stats(faction: String, unit_class: String, upgrades = {}) -> Dictiona
 	if upgrades.get("plated_armour", false):
 		stats["armor"] = min(0.6, stats["armor"] + 0.12)
 	if upgrades.get("war_drills", false) and unit_class in ["infantry", "archer"]:
-		stats["squad_size"] += 2
+		stats["squad_size"] += 1
 	stats["name"] = FACTIONS[faction]["units"][unit_class]
 	stats["class"] = unit_class
 	return stats

@@ -26,8 +26,13 @@ func _ready():
 	_texture_rect.gui_input.connect(_on_gui_input)
 
 
+var _frame_counter = 0
+
+
 func _physics_process(_delta):
-	_sync_real_units_with_minimap_representations()
+	_frame_counter += 1
+	if _frame_counter % 4 == 0:  # 15 Hz is plenty for minimap dots
+		_sync_real_units_with_minimap_representations()
 	_update_camera_indicator()
 
 

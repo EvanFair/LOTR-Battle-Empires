@@ -95,7 +95,7 @@ func _run_step():
 			wait(20)
 		2:
 			var sheltered = house().alive_villagers().filter(func(v): return v.is_sheltered()).size()
-			check("Return home shelters villagers", sheltered >= 4, "(%d sheltered)" % sheltered)
+			check("Return home shelters villagers", sheltered >= GameData.VILLAGERS_PER_HOUSE - 1, "(%d sheltered)" % sheltered)
 			cmd({"type": "assign_villagers", "house": house().net_id, "assignment": "food"})
 			# give resources so the rest of the test isn't waiting on the economy
 			_me.add_resources({"food": 3000, "wood": 3000, "stone": 2000, "iron": 2000})
@@ -239,7 +239,7 @@ func _run_step():
 			check("Andúril Strike damages an enemy", not is_instance_valid(dummy) or dummy.hp < hp_before)
 			var troops_before = _troop_count()
 			cmd({"type": "cast", "key": "R", "pos": hero().global_position + Vector3(4, 0, 0)})
-			check("Army of the Dead summons a squadron", _troop_count() >= troops_before + 8)
+			check("Army of the Dead summons a squadron", _troop_count() >= troops_before + 5)
 			_data.summon_check = GameData.now()
 			wait(17)
 		22:

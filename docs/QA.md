@@ -52,17 +52,19 @@ SHIP READINESS: READY (as a playable build); see "Gap to the full game"
 
 ## Gap to the full game
 
-What exists today versus the design in `docs/PLAN.md`:
+Updated after the "build it all" pass (armies, heroes, jungle, shop, sound, controls):
 
-| Area | Built | Missing for the full game |
+| Area | Built | Still missing |
 |---|---|---|
-| **Look** | KayKit animated units and medieval buildings per faction, scenery, faction ground | LOTR-specific hero models (Sketchfab downloads need your login), real horse and siege models, hero portraits and unit icons, a parchment/Middle-earth UI theme, LOTR fonts |
-| **Heroes** | 4 heroes (Aragorn full QWER; Théoden, Gothmog, Lurtz one ability each) | 20 more heroes; full kits for the three; ability levelling (Ctrl+key); hero items |
+| **Look** | KayKit animated units and buildings per faction, procedural siege engines, Shelob and jungle spiders, Cave Troll, ability and item icons (Open MOBA, CC-BY) | LOTR-specific hero models, real horse models, hero portraits, a parchment UI theme |
+| **Heroes** | All 12 heroes of the 4 launch factions, four abilities each, ranks via skill points, stun/root/slow/weaken | Heroes for the other 4 factions, hero-specific voice lines |
 | **Factions** | Gondor, Rohan, Mordor, Isengard | Eldar, Durin's Folk, Harad & the East, Guardians of the Wild |
-| **Armies** | Infantry, archers, riders; Barracks, Range, Stables; auto-repeat lanes; counters | Heavy and special units, Siege Works and faction special buildings, Age III, Blacksmith and squad-size upgrades, walls |
-| **Economy** | Villagers, 5 resources, Storehouse halving, hauling, hero-only building, Ages I–II | Jungle camps and gold farming, the Town Center shop, farms, population cap |
-| **Map** | One 4-base, 6-lane map | Central boss camp (Cave Troll), jungle creatures, more maps (Pelennor, Helm's Deep, Osgiliath…), terrain height |
-| **Multiplayer** | LAN host/join, discovery, bot takeover | Internet play, reconnecting, a match browser |
-| **AI** | Bots build, advance, train and push | Difficulty levels, smarter hero play, use of all abilities |
-| **Audio** | Leftover open-rts sci-fi voice lines | Music, combat sound effects, LOTR-flavoured unit responses |
-| **Front end** | Main menu, lobby, end screen | Hero select with portraits, how-to-play/tutorial, match stats, settings (graphics, keys, collision toggle) |
+| **Armies** | 5 classes per faction incl. unique heavy and special troops, Ages I–III, Siege Works, faction special building, Blacksmith research, auto-repeat lanes, counters | Walls and gates, formations |
+| **Economy** | Villagers (3 per house), 5 resources, regrowing herds, Storehouse halving, hauling, jungle gold, Town Center shop (10 items) | Farms, trading |
+| **Map** | 4-base 6-lane map, 8 jungle camps, Cave Troll lair | More maps (Pelennor, Helm's Deep, Osgiliath), terrain height |
+| **Controls** | MOBA scheme from 4 reference MOBAs (docs/CONTROLS.md): hold-to-aim, attack-move, hold, recall, pings, minimap orders, markers, damage numbers | Key rebinding, quick-cast option toggle |
+| **Multiplayer** | LAN host/join, discovery, bot takeover | Internet play, reconnecting |
+| **AI** | Bots build through Age III, research, learn abilities, buy items, hunt camps, push lanes | Difficulty levels, team coordination |
+| **Audio** | Music, combat/arrow/tower/death/level-up/UI sounds, synthesized horns, war drums, clashes, blasts | Unit voice lines, per-faction music |
+| **Performance** | Spatial grid for targeting, 10 Hz fog visibility, throttled minimap, small squads and 3 villagers per house | Profiling on real laptop hardware |
+| **Front end** | Main menu, lobby with all 12 heroes, end screen | Hero select with portraits, tutorial, settings menu |

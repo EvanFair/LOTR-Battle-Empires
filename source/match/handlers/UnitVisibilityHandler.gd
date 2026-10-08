@@ -14,11 +14,41 @@ func _ready():
 	MatchSignals.unit_died.connect(_on_unit_died)
 
 
+const UPDATE_EVERY_N_PHYSICS_FRAMES = 6  # 10 Hz is plenty for fog of war
+const GRID_CELL = 16.0  # >= the longest sight range + compensation
+
+var _frame_counter = 0
+
+
 func _physics_process(_delta):
+	_frame_counter += 1
+	if _frame_counter % UPDATE_EVERY_N_PHYSICS_FRAMES != 0:
+		return
 	var all_units = get_tree().get_nodes_in_group("units")
 	var revealed_units = all_units.filter(func(unit): return unit.is_in_group("revealed_units"))
+	# bucket revealers into a coarse grid: each unit then only checks the 3x3 cells around it
+	# instead of every revealer on the map (the original was O(units x revealers) per frame)
+	var grid = {}
+	for r in revealed_units:
+		if not r.is_revealing() or r.sight_range == null:
+			continue
+		var k = Vector2i(floori(r.global_position.x / GRID_CELL), floori(r.global_position.z / GRID_CELL))
+		if grid.has(k):
+			grid[k].append(r)
+		else:
+			grid[k] = [r]
 	for unit in all_units:
-		_recalculate_unit_visibility(unit, revealed_units)
+		if unit.is_in_group("revealed_units") or _is_disabled():
+			_update_unit_visibility(unit, true)
+			continue
+		var k = Vector2i(floori(unit.global_position.x / GRID_CELL), floori(unit.global_position.z / GRID_CELL))
+		var nearby = []
+		for dx in [-1, 0, 1]:
+			for dz in [-1, 0, 1]:
+				var bucket = grid.get(k + Vector2i(dx, dz))
+				if bucket != null:
+					nearby.append_array(bucket)
+		_recalculate_unit_visibility(unit, nearby)
 	for orphaned_dummy in _orphaned_dummies:
 		_recalcuate_orphaned_dummy_existence(orphaned_dummy, revealed_units)
 
