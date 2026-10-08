@@ -1,0 +1,71 @@
+BATTLE EMPIRES - DESIGN v2 (your answers, 8-9 Oct 2026)
+=========================================================
+
+MATCH
+- No time limit. A match runs roughly 30-45 minutes.
+- Win by destroying the enemy Town Center ("the city"). Like Age of Empires, a well
+  laid-out town (walls, gates, towers) makes that much harder.
+- Keep 4 bases.
+
+THE MAP (next big change)
+- Town Centers move about a third of the way in from the corners, open on every side:
+  no mountain or map edge behind a base, so you can be attacked from any angle.
+  The Town Center position is the only fixed thing in a base.
+- No fixed lanes. Open fields joined by winding roads (base to base, to forgotten
+  towers, to jungle camps). Units can walk anywhere; roads are the natural routes.
+- FORGOTTEN TOWERS: neutral ruined towers along the roads. Stand next to one with your
+  hero (no enemy nearby) for about 10 s to claim it; it then shoots for you. Enemies
+  take it back the same way, or destroy it so it falls back to ruins.
+
+ARMIES
+- Only the squadrons you pay for (no free minion waves).
+- Auto-repeat squadrons still march steadily ("minions walking"): per building you pick
+  a target (an enemy base, a forgotten tower or a jungle camp) and they follow the
+  roads there, fighting what they meet.
+- You can send squads to clear jungle camps.
+- Command from anywhere: box-select, right-click, G = follow me (built 9 Oct).
+- If your hero is dead, your army loses heart: your squads deal less damage until the
+  hero respawns.
+
+HEROES
+- Hero vs squadron depends on hero rank: hero LEVEL matters most (a low-level hero can
+  be killed by a squad, a high-level hero cuts through squads), and LEGEND heroes
+  (Aragorn, the Witch-king, Saruman...) start a little stronger than CAPTAINS
+  (Lurtz, Gothmog...).
+
+TOWN AND DEFENSES
+- Bases start open. You drag-place walls (palisade, later stone).
+- Where a wall crosses a road into your town, a gate is made automatically. At least
+  3 roads lead into every town, so there are always at least 3 gates.
+- Buildings can go anywhere (built 9 Oct).
+
+VILLAGERS
+- Far fewer villagers, fully automatic. One focus button: Balanced / Food / Wood /
+  Stone / Iron. Villagers split themselves, leaning towards the focus.
+
+LOOK
+- Low-poly, adult proportions, closer to the real thing than cartoon (art prompts in
+  docs/ART_PROMPTS.txt; your LowPoly asset pack to come via a GitHub release).
+
+LAN (your question: "every interaction just dots and actions?")
+- Yes, that is already how it works, and how big games do it:
+  * Each player only sends COMMANDS (move here, attack that, cast Q) to the host.
+  * The host runs the simulation and sends back compact state: unit id, position,
+    health (10 times a second) plus slower info twice a second.
+  * Every computer draws all the 3D graphics, animations, effects and sound itself.
+    No graphics ever go over the network.
+- League of Legends works the same way with a dedicated server. Age of Empires goes
+  further ("lockstep"): it sends ONLY the commands and every PC runs an identical
+  simulation. That uses the least network, but any tiny difference between PCs
+  desyncs the game, so it is hard to do reliably in Godot.
+- Planned improvements for us: only send units that changed, smaller numbers
+  (16-bit positions), and don't send enemy units a player can't see (also stops
+  map-hack cheating).
+
+BUILD ORDER FOR THE NEXT PASS
+1. New map: inward Town Centers, road network, forgotten towers, more open ground.
+2. Auto-repeat targets (base / tower / camp) with road-following marches.
+3. Walls (drag to place) with automatic gates on roads.
+4. Automatic villagers with a focus button.
+5. Hero levels and legend/captain tiers vs squads; army loses heart when the hero dies.
+6. Leaner LAN snapshots (changed units only, smaller numbers, vision culling).
