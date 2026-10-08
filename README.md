@@ -8,7 +8,16 @@ Up to 4 players over LAN or against bots. Teams like Age of Empires: 2v2, 3v1 or
 - **Research:** [docs/RESEARCH.md](docs/RESEARCH.md): reference code, free LOTR models, tools
 - **Claude Code skills:** [.claude/skills/](.claude/skills/README.md): Godot RTS, MOBA, navigation, combat and more
 
-## Play it
+## Download (Windows)
+
+1. Go to **[Releases](https://github.com/EvanFair/LOTR-Battle-Empires/releases/latest)** and download `LOTR-Battle-Empires-windows.zip`.
+2. Unzip it anywhere (for example, your Desktop) and double-click **`LOTR Battle Empires.exe`**. Nothing to install.
+3. Windows SmartScreen may say "Windows protected your PC", because the game isn't code-signed. Click **More info → Run anyway**.
+4. The first time you host a LAN game, Windows Firewall asks for network access. Allow it on **Private networks**, or friends won't be able to join.
+
+Every push to `main` also builds a fresh `.exe` (Actions tab → latest "Build Windows" run → Artifacts). Pushing a tag like `v0.2.0` publishes a new Release.
+
+## Play it from the source code
 
 1. Install **Godot 4.3** (exactly 4.3): <https://godotengine.org/download/archive/4.3-stable/>
 2. Open `project.godot` in Godot and press **F5**. The first open takes a minute to import files.

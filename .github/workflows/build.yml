@@ -1,0 +1,55 @@
+name: Build Windows
+
+# Every push to main builds the Windows .exe and attaches it to the run (Actions tab -> run -> Artifacts).
+# Pushing a tag like v0.1.0 also publishes it as a GitHub Release with a permanent download link.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot 4.3 and the Windows export templates
+        run: |
+          curl -sSL -o godot.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip
+          unzip -q godot.zip && mv Godot_v4.3-stable_linux.x86_64 godot
+          curl -sSL -o templates.tpz https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
+          T=~/.local/share/godot/export_templates/4.3.stable
+          mkdir -p $T
+          unzip -q -j templates.tpz templates/windows_release_x86_64.exe templates/windows_debug_x86_64.exe templates/version.txt -d $T
+          rm templates.tpz
+
+      - name: Import project
+        run: |
+          ./godot --headless --path . --import || true
+          ./godot --headless --path . --import
+
+      - name: Export
+        run: |
+          mkdir -p build
+          ./godot --headless --path . --export-release "Windows Desktop" "build/LOTR Battle Empires.exe"
+          cd build && zip -9 LOTR-Battle-Empires-windows.zip "LOTR Battle Empires.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LOTR-Battle-Empires-windows
+          path: build/LOTR-Battle-Empires-windows.zip
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/LOTR-Battle-Empires-windows.zip
+          body: |
+            Windows build of LOTR Battle Empires. Unzip and double-click `LOTR Battle Empires.exe`.
+            Windows SmartScreen may warn because the game isn't code-signed: click "More info" -> "Run anyway".
