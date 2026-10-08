@@ -6,9 +6,9 @@ extends CanvasLayer
 
 const PANEL_BG = Color(0.08, 0.07, 0.06, 0.82)
 const ACCENT = Color("e8c24a")
-const RES_ICONS = {"food": "🍖", "wood": "🪵", "stone": "🪨", "iron": "⛏", "gold": "🪙"}
+const RES_ICONS = {"food": "Food", "wood": "Wood", "stone": "Stone", "iron": "Iron", "gold": "Gold"}
 const ASSIGN_LABELS = {
-	"food": "🍖 Food", "wood": "🪵 Wood", "stone": "🪨 Stone", "iron": "⛏ Iron", "home": "🏠 Home",
+	"food": "Food", "wood": "Wood", "stone": "Stone", "iron": "Iron", "home": "Return home",
 }
 const TOAST_TIME = 4.0
 const SQUAD_ORDER_BUTTONS = [
@@ -93,6 +93,15 @@ func _panel(parent, anchors: int, min_size = Vector2.ZERO) -> PanelContainer:
 	panel.custom_minimum_size = min_size
 	parent.add_child(panel)
 	panel.set_anchors_and_offsets_preset(anchors, Control.PRESET_MODE_MINSIZE, 8)
+	# grow away from the screen edge the panel is anchored to
+	if anchors in [Control.PRESET_BOTTOM_LEFT, Control.PRESET_BOTTOM_RIGHT, Control.PRESET_CENTER_BOTTOM, Control.PRESET_BOTTOM_WIDE]:
+		panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	if anchors in [Control.PRESET_TOP_RIGHT, Control.PRESET_BOTTOM_RIGHT, Control.PRESET_RIGHT_WIDE, Control.PRESET_CENTER_RIGHT]:
+		panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	if anchors in [Control.PRESET_CENTER_TOP, Control.PRESET_CENTER_BOTTOM, Control.PRESET_CENTER]:
+		panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	if anchors == Control.PRESET_CENTER:
+		panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	return panel
 
 
@@ -155,7 +164,7 @@ func _refresh_top_bar():
 	var clock = "%02d:%02d" % [elapsed / 60, elapsed % 60]
 	var p = _match.local_player
 	if p == null:
-		_top_label.text = "Spectating    ⏱ " + clock
+		_top_label.text = "Spectating    " + clock
 		return
 	var parts = []
 	for res in GameData.RESOURCES:
@@ -165,15 +174,15 @@ func _refresh_top_bar():
 			text += " (+%d/min)" % income
 		parts.append(text)
 	var houses = p.buildings("village_house").size()
-	parts.append("🏠 %d/%d" % [houses, GameData.MAX_HOUSES])
+	parts.append("Houses %d/%d" % [houses, GameData.MAX_HOUSES])
 	parts.append("Age: %s" % GameData.AGE_NAMES[p.age])
-	parts.append("⏱ " + clock)
+	parts.append(clock)
 	_top_label.text = "    ".join(parts)
 
 
 # --- hero panel -------------------------------------------------------------------------------
 func _build_hero_panel():
-	var panel = _panel(_root, Control.PRESET_CENTER_BOTTOM, Vector2(460, 0))
+	var panel = _panel(_root, Control.PRESET_CENTER_BOTTOM, Vector2(620, 0))
 	var box = VBoxContainer.new()
 	panel.add_child(box)
 	_hero_name = _label(box, "", 16, ACCENT)
@@ -184,8 +193,9 @@ func _build_hero_panel():
 	row.add_theme_constant_override("separation", 6)
 	box.add_child(row)
 	for key in ["Q", "W", "E", "R"]:
-		var b = _button(row, key, _on_ability_pressed.bind(key), 105)
+		var b = _button(row, key, _on_ability_pressed.bind(key), 148)
 		b.custom_minimum_size.y = 46
+		b.add_theme_font_size_override("font_size", 13)
 		b.clip_text = true
 		_ability_buttons[key] = b
 	_respawn_label = _label(box, "", 18, Color("ff8080"))
@@ -204,7 +214,10 @@ func _refresh_hero():
 	if h == null:
 		_hero_name.text = "Waiting for your hero..."
 		return
-	_hero_name.text = "%s — Level %d %s" % [h.display_name, h.level, GameData.HEROES[h.hero_key].role]
+	_hero_name.text = "%s - Level %d %s    HP %d/%d    Mana %d/%d" % [
+		h.display_name, h.level, GameData.HEROES[h.hero_key].role, max(0, h.hp) if not h.dead else 0,
+		h.hp_max, int(h.mana), int(h.mana_max)
+	]
 	_hp_bar.max_value = h.hp_max
 	_hp_bar.value = h.hp if not h.dead else 0
 	_hp_bar.tooltip_text = "%d / %d HP" % [h.hp, h.hp_max]
@@ -218,7 +231,7 @@ func _refresh_hero():
 		var b = _ability_buttons[key]
 		var a = h.ability(key)
 		if a == null:
-			b.text = "%s\n—" % key
+			b.text = "%s\n-" % key
 			b.disabled = true
 			b.tooltip_text = "Coming in a later milestone"
 			continue
@@ -235,8 +248,8 @@ func _refresh_hero():
 # --- squadrons --------------------------------------------------------------------------------
 func _build_squad_panel():
 	var panel = _panel(_root, Control.PRESET_BOTTOM_LEFT, Vector2(300, 0))
-	panel.offset_bottom = -228
-	panel.offset_top = panel.offset_bottom - 200
+	panel.offset_bottom = -228  # sits above the minimap and grows upward
+	panel.offset_top = -228
 	_squad_box = VBoxContainer.new()
 	panel.add_child(_squad_box)
 	_label(_squad_box, "Squadrons nearby (Tab)", 14, ACCENT)
@@ -261,6 +274,13 @@ func _on_squad_order(order):
 func _refresh_squads():
 	if _squad_list == null or _match.hero_controller == null:
 		return
+	var minimap = _match.find_child("Minimap")
+	if minimap != null:
+		var panel = _squad_box.get_parent()
+		var bottom = -(minimap.size.y + 18)
+		if panel.offset_bottom != bottom:
+			panel.offset_bottom = bottom
+			panel.offset_top = bottom
 	var squads = _match.hero_controller.squads_in_range()
 	_squad_hint.visible = squads.is_empty()
 	_squad_detail.visible = not squads.is_empty()
@@ -274,8 +294,8 @@ func _refresh_squads():
 		var b = buttons[i] if i < buttons.size() else _button(_squad_list, "", func(): pass)
 		if i >= buttons.size():
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var marker = "▶ " if s.id == selected else "   "
-		b.text = "%s%s ×%d  %d%%  %s" % [
+		var marker = "> " if s.id == selected else "   "
+		b.text = "%s%s x%d  %d%%  %s" % [
 			marker, s.name, s.count, int(s.hp * 100), _squad_state_name(s.state)
 		]
 		for c in b.pressed.get_connections():
@@ -375,9 +395,9 @@ func _refresh_base_panel():
 			limit = " (%d/%d)" % [count, GameData.MAX_HOUSES]
 		elif data.has("max"):
 			limit = " (%d/%d)" % [count, data.max]
-		b.text = "%s%s — %s%s" % [
+		b.text = "%s%s - %s%s" % [
 			data.name, limit, GameData.cost_text(data.cost),
-			("   🔒 %s Age" % GameData.AGE_NAMES[data.age]) if locked else ""
+			("   (needs %s Age)" % GameData.AGE_NAMES[data.age]) if locked else ""
 		]
 		b.disabled = locked or not p.has_resources(data.cost)
 	_refresh_military()
@@ -444,13 +464,13 @@ func _send_auto(b, row, enabled):
 
 func _update_military_row(row, b):
 	var stats = b.squad_stats()
-	row.title.text = "%s → %s ×%d" % [b.display_name, stats.name, stats.squad_size]
+	row.title.text = "%s: %s x%d" % [b.display_name, stats.name, stats.squad_size]
 	row.supply.value = b.supply_fraction() * 100.0
 	var cost = b.squad_cost()
 	var have = []
 	for res in cost:
 		have.append("%s %d/%d" % [RES_ICONS[res], b.supply.get(res, 0), cost[res]])
-	var status = "Supply: " + "  ".join(have)
+	var status = "Supply: " + ", ".join(have)
 	if b.wants_supply() and not b.supply_full():
 		status += "\nWaiting for villagers to deliver supplies"
 	elif b.manual_pending > 0:
@@ -506,9 +526,9 @@ func _refresh_age_tab():
 func _paused_text(reason):
 	match reason:
 		"no_hero":
-			return "⏸ a hero must stay nearby"
+			return "PAUSED: a hero must stay nearby"
 		"enemy_hero":
-			return "⏸ enemy hero nearby!"
+			return "PAUSED: enemy hero nearby!"
 	return ""
 
 
@@ -551,7 +571,7 @@ func _refresh_bubbles():
 	var alive = _bubble_house.alive_villagers().size() if _match.is_host() else _bubble_house.get_meta("villagers_alive", 0)
 	var title = "Villagers %d/%d" % [alive, GameData.VILLAGERS_PER_HOUSE]
 	if alive < GameData.VILLAGERS_PER_HOUSE:
-		title += "   ⏳ next in %ds (50 Food)" % ceili(max(0.0, _bubble_house.respawn_left))
+		title += "   next villager in %ds (50 Food)" % ceili(max(0.0, _bubble_house.respawn_left))
 	_bubbles.get_meta("title").text = title
 	for b in _bubbles.get_meta("row").get_children():
 		var active = b.get_meta("assignment") == _bubble_house.assignment

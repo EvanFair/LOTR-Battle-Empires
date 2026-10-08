@@ -597,6 +597,7 @@ func fx(kind: String, from: Vector3, to: Vector3):
 
 
 func _move_camera_to_start():
+	_camera.set_size_safely(30.0)
 	var focus = Vector3(MapGen.SIZE / 2.0, 0, MapGen.SIZE / 2.0)
 	if local_player != null:
 		focus = MapGen.spawn_points()[local_player.slot_index]

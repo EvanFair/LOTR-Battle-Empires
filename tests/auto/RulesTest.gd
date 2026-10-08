@@ -68,6 +68,9 @@ func _physics_process(_delta):
 	if not _match.started:
 		return
 	_me = _match.local_player
+	# test god-mode: keep our hero alive so bot raids can't derail the scripted steps
+	if hero() != null and hero().is_alive() and _step >= 7:
+		hero().hp = hero().hp_max
 	if GameData.now() < _wait_until:
 		return
 	_run_step()

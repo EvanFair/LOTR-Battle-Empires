@@ -44,6 +44,13 @@ layout_mode = 2
 theme_override_constants/separation = 10
 alignment = 1
 
+[node name="Title" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.909804, 0.760784, 0.290196, 1)
+theme_override_font_sizes/font_size = 34
+text = "LOTR BATTLE EMPIRES"
+horizontal_alignment = 1
+
 [node name="Button" type="Button" parent="PanelContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "PLAY"

@@ -60,7 +60,11 @@ theme_override_constants/margin_bottom = 15
 layout_mode = 2
 theme_override_font_sizes/normal_font_size = 20
 bbcode_enabled = true
-text = "[center][u]CORE_CONTRIBUTORS:[/u]
+text = "[center][u]LOTR BATTLE EMPIRES[/u]
+- Evan Fair, built with Claude Code
+- A personal fan project, not affiliated with the Tolkien Estate or Warner Bros.
+
+[u]BUILT ON OPEN RTS (MIT)[/u]
 - Pawel Lampe (Scony) | Lampe Games
 
 [u]ASSETS:[/u]

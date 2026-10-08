@@ -204,9 +204,12 @@ func _build_lobby_screen():
 		row.name.custom_minimum_size.x = 160
 		grid.add_child(row.name)
 		row.kind = OptionButton.new()
-		for k in ["open", "bot"]:
+		for k in ["open", "bot", "human"]:
 			row.kind.add_item(KIND_LABELS[k])
-		row.kind.item_selected.connect(func(idx): Network.request_slot_change(i, "kind", ["open", "bot"][idx]))
+		row.kind.set_item_disabled(2, true)  # humans arrive by joining
+		row.kind.item_selected.connect(func(idx):
+			if idx < 2:
+				Network.request_slot_change(i, "kind", ["open", "bot"][idx]))
 		grid.add_child(row.kind)
 		row.faction = OptionButton.new()
 		for f in GameData.PLAYABLE_FACTIONS:
@@ -242,10 +245,8 @@ func _refresh_lobby(slots):
 		var slot = slots[i]
 		row.name.text = slot.name + ("  (you)" if i == me else "")
 		var human = slot.kind == "human"
-		row.kind.visible = not human
-		row.kind.disabled = not is_host
-		if not human:
-			row.kind.select(["open", "bot"].find(slot.kind))
+		row.kind.disabled = not is_host or human
+		row.kind.select(["open", "bot", "human"].find(slot.kind))
 		var editable = (is_host and not human) or i == me
 		var open = slot.kind == "open"
 		row.faction.disabled = not editable or open

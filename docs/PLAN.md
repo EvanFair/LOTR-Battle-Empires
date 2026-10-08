@@ -2,6 +2,31 @@
 
 _Produced with the gstack-autoplan pipeline (CEO, then Eng, then Design review). Revision 4, 2026-10-08: Storehouse and villager hauling, Food cost to replace villagers, enemy heroes pause construction, towers anywhere, **LAN multiplayer moved into the weekend**._
 
+## Build status (M1)
+
+**Built and tested headless** (see `tests/auto/` and the README):
+
+| Area | Status |
+|---|---|
+| LAN multiplayer (host-authoritative ENet, LAN discovery, lobby, bot takeover on disconnect) | Done (LanTest: client command runs on the host and replicates back) |
+| Hero: click-to-move, attack, camera lock/free-look, XP and levels, respawn timer | Done |
+| Abilities: Aragorn QWER; Théoden R, Gothmog W, Lurtz Q | Done (RulesTest) |
+| Squadrons: march lanes, aggro, Tab plus 1–4 orders within 15m (attack, defend, hold, return to heal) | Done |
+| Villagers: 5 per house, resource bubbles, Return home shelter, 45s respawn for 50 Food, 10-house cap | Done |
+| Stockpile, Storehouse (Age II, max 1, halves stockpile, 2-min rebuild cooldown), automatic hauling | Done |
+| Hero-only construction (paused without a hero or with an enemy hero, 1.5× with allies, towers anywhere) | Done |
+| Ages I–II, Barracks / Archery Range / Stables, auto-repeat lanes, AoE counter table | Done |
+| Teams like AoE (Team 1–4 per slot, Team and FFA presets), 6-lane 4-base map, fog of war, minimap | Done |
+| Bots | Done (4 bots reach Age II and fight within ~6 minutes) |
+| HUD: resource bar, hero panel, squadron panel, base panel, bubbles, building labels, toasts, end screen | Done (checked in screenshots) |
+
+**Not done yet / simplified:**
+- **Real LOTR models:** units are low-poly stand-in shapes. Importing the Sketchfab/KayKit models (step 15) needs your downloads.
+- **Performance on a real laptop:** this needs your machine. The 4-bot test peaks at about 150 units; run it and watch the FPS (F1 shows the diagnostics overlay).
+- **Unit collision on/off setting:** not built yet (small).
+- **Ability levelling (Ctrl+key):** abilities are all available from level 1 for now.
+- **Clients' fog of war** is computed locally from replicated positions, so it isn't cheat-proof (fine on a friendly LAN).
+
 ## Executive summary
 
 LOTR Battle Empires is a 4-player Lord of the Rings game with **Team (2v2)** and **Free-for-All** modes. Each player controls **only their Hero**, Dota-style. You assign villagers to gather resources, build in person with your Hero, and pay for troops like Age of Empires. The troops fight as **squadrons** that march down lanes, and you command them in person by standing near them.

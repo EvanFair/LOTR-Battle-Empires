@@ -48,8 +48,13 @@ static func build(seed_value: int) -> Node3D:
 		marker.name = "Spawn%d" % i
 		marker.position = spawns[i]
 		spawn_root.add_child(marker)
+	var grass = StandardMaterial3D.new()
+	grass.albedo_color = Color("6f8f4e")
+	grass.roughness = 1.0
+	map.find_child("Terrain").material_override = grass
 	var lanes = build_lanes()
 	map.set_meta("lanes", lanes)
+	_paint_lanes(map, lanes)
 	_place_resources(map, rng, spawns, lanes)
 	_place_decorations(map, rng, spawns, lanes)
 	return map
@@ -84,6 +89,28 @@ static func lane_points_from(lane: Dictionary, spawn_index: int) -> Array:
 
 static func lanes_for(spawn_index: int) -> Array:
 	return build_lanes().filter(func(l): return l.a == spawn_index or l.b == spawn_index)
+
+
+static func _paint_lanes(map, lanes):
+	# dirt roads so lanes are readable on the ground
+	var dirt = StandardMaterial3D.new()
+	dirt.albedo_color = Color("9a8460")
+	dirt.roughness = 1.0
+	var root = map.find_child("Decorations")
+	for lane in lanes:
+		var pts = lane.points
+		for i in range(pts.size() - 1):
+			var a = pts[i]
+			var b = pts[i + 1]
+			var road = MeshInstance3D.new()
+			var plane = PlaneMesh.new()
+			plane.size = Vector2(3.2, a.distance_to(b) + 0.4)
+			road.mesh = plane
+			road.material_override = dirt
+			road.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			road.position = (a + b) / 2.0 + Vector3(0, 0.02, 0)
+			road.rotation.y = atan2(b.x - a.x, b.z - a.z)
+			root.add_child(road)
 
 
 static func _distance_to_lanes(point: Vector3, lanes: Array) -> float:

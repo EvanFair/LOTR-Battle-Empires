@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot 4.3
+        run: |
+          curl -sSL -o godot.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip
+          unzip -q godot.zip
+          mv Godot_v4.3-stable_linux.x86_64 godot
+          ./godot --version
+
+      - name: Import project
+        # the first import reports errors while files are still being imported; a second pass is clean
+        run: |
+          ./godot --headless --path . --import || true
+          ./godot --headless --path . --import
+
+      - name: Bot match (team)
+        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6
+
+      - name: Bot match (free-for-all)
+        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6 --preset=ffa
+
+      - name: Rules
+        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/RulesTest.tscn
+
+      - name: LAN host and client
+        run: |
+          ./godot --headless --path . res://tests/auto/LanTest.tscn -- --role=host --seconds=30 > host.log 2>&1 &
+          HOST=$!
+          ./godot --headless --path . res://tests/auto/LanTest.tscn -- --role=client --seconds=30
+          wait $HOST
+          grep "RESULT: PASS" host.log

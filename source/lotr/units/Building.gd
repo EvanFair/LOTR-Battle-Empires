@@ -33,9 +33,20 @@ var age_target = 0
 var age_progress = 0.0
 
 
+var _label3d = null
+
+
 func _ready():
 	await super()
 	add_to_group("buildings")
+	_label3d = Label3D.new()
+	_label3d.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_label3d.no_depth_test = true
+	_label3d.font_size = 40
+	_label3d.outline_size = 10
+	_label3d.pixel_size = 0.01
+	_label3d.position.y = 3.6 if building_key != "watchtower" else 6.6
+	add_child(_label3d)
 	trains = GameData.BUILDINGS[building_key].get("trains", "")
 	auto_acquire = attack_damage != null
 	if progress < 1.0:
@@ -122,6 +133,27 @@ func cancel_construction():
 		refund[res] = int(cost[res] * GameData.CONSTRUCTION_REFUND)
 	player.add_resources(refund)
 	queue_free()
+
+
+func _process(_delta):
+	if _label3d == null:
+		return
+	var text = ""
+	if not is_constructed():
+		text = "%d%%" % int(progress * 100)
+		if build_paused_reason == "no_hero":
+			text += "  needs a hero nearby"
+		elif build_paused_reason == "enemy_hero":
+			text += "  ENEMY HERO!"
+	elif building_key == "village_house" and is_in_group("controlled_units"):
+		var alive = alive_villagers().size() if not puppet else get_meta("villagers_alive", 0)
+		text = "%s %d/%d" % [assignment.capitalize() if assignment != "home" else "Home", alive, GameData.VILLAGERS_PER_HOUSE]
+	elif trains != "" and is_in_group("controlled_units") and (auto_repeat or manual_pending > 0):
+		text = "Supply %d%%" % int(supply_fraction() * 100) if not supply_full() else "Next %ds" % ceili(cycle_left)
+	elif building_key == "town_center" and age_target > 0:
+		text = "Age %d%%" % int(age_progress * 100)
+	_label3d.text = text
+	_label3d.visible = text != "" and find_child("Geometry").visible
 
 
 # --- main loop (host) --------------------------------------------------------------------------
