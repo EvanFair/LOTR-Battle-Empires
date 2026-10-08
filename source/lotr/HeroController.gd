@@ -87,6 +87,12 @@ func _update_indicators(h):
 	if indicators == null or not indicators.is_inside_tree():
 		return
 	var alive = h != null and h.is_alive()
+	if mode == "place_wall" and _wall_start != null:
+		var cursor = _mouse_ground()
+		if cursor != null:
+			var length = min(_wall_start.distance_to(cursor), GameData.WALL_MAX_LENGTH)
+			indicators.show_aim(_wall_start, {"mode": "line", "range": length, "width": 0.9}, cursor)
+		return
 	if alive and aiming != "" and h.ability(aiming) != null:
 		indicators.show_aim(h.global_position, HeroAbilities.aim(h.ability(aiming)), _mouse_ground())
 	elif alive and mode == "attack_move":
@@ -240,6 +246,19 @@ func _handle_left_click():
 		get_viewport().set_input_as_handled()
 		return
 	match mode:
+		"place_wall":
+			var point = _mouse_ground()
+			if point == null:
+				return
+			if _wall_start == null:
+				_wall_start = point
+			else:
+				_submit({"type": "build_wall", "building": placing_building, "from": _wall_start, "to": point})
+				if Input.is_key_pressed(KEY_SHIFT):
+					_wall_start = point  # Shift keeps drawing from where the last wall ended
+				else:
+					cancel_mode()
+			get_viewport().set_input_as_handled()
 		"cast":
 			var key = aiming
 			aiming = ""
@@ -516,9 +535,17 @@ func _start_mode(new_mode):
 
 
 # --- building placement ---------------------------------------------------------------------
+var _wall_start = null
+
+
 func start_placing(building_key: String):
 	cancel_mode()
 	placing_building = building_key
+	if GameData.BUILDINGS[building_key].get("wall", false):
+		mode = "place_wall"  # click the start, click the end
+		_wall_start = null
+		mode_changed.emit(mode)
+		return
 	mode = "place"
 	var template = UnitFactory.create(
 		{"kind": "building", "building": building_key, "faction": local_player().faction}
@@ -535,6 +562,7 @@ func start_placing(building_key: String):
 func cancel_mode():
 	mode = ""
 	placing_building = ""
+	_wall_start = null
 	if _ghost != null:
 		_ghost.queue_free()
 		_ghost = null

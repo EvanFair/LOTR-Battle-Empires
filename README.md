@@ -55,14 +55,17 @@ The full reasoning, and how other open-source MOBAs do it, is in [docs/CONTROLS.
 
 ### How a match works
 
-- **Economy:** up to 6 Village Houses of 3 villagers. Assign each house to Food, Wood, Stone or Iron. Resources run out, so expand to new spots. Hunt deer and clear jungle camps for extra Food and Gold. A killed villager comes back free after 30s.
+- **The map:** four Town Centers a third of the way in, open on every side, joined by winding roads (three roads into every town). Eight **forgotten towers** stand on the roads: stand next to one with your hero for 10 seconds (with no enemy hero nearby) to claim it; destroyed towers fall back to ruins that can be claimed again.
+- **Economy:** up to 6 Village Houses of 3 villagers. Villagers work on their own; set their **focus** (Balanced, Food, Wood, Stone or Iron) in the top bar or by clicking a house. **Shelter** sends them all indoors. Resources run out, so expand to new spots. Hunt deer and clear jungle camps for extra Food and Gold. A killed villager comes back free after 30s.
 - **Building:** only heroes build, and buildings can go **anywhere** (press **V** out in the field). Stand next to the foundation while the timer runs; an enemy hero nearby pauses it. Two heroes build 1.5× faster. Up to 10 watchtowers.
+- **Walls:** Palisade (Age I) and Stone Wall (Age II): click where the wall starts and where it ends (Shift keeps drawing). Where a wall crosses a road a **gate** is made automatically: it opens for your units and shuts when enemies come near, so they have to break through.
 - **Ages:** advance at the Town Center (your hero must stay there).
   - **Kingdom Age** unlocks the Archery Range, Stables, Storehouse and Blacksmith.
   - **Empire Age** unlocks the Siege Works, your faction's special building (Ranger Hideout, Meduseld, Black Gate Forge, Orthanc Furnace) and the top Blacksmith research.
 - **Armies:**
   - Barracks (infantry), Archery Range (archers), Stables (riders), Siege Works (heavy) and the special building train squadrons, paid straight from your stockpile.
-  - Turn on **Auto-repeat** and pick a lane, and you get a squadron every 60s that marches that lane (Top, Mid, Bottom, Left or Right).
+  - Turn on **Auto-repeat** and pick a target (an enemy base, a forgotten tower or a jungle camp), and you get a squadron every 60s that marches there along the roads.
+  - If your hero is dead, your army **loses heart** (-20% damage) until the hero returns.
   - Command them from anywhere: box-select and right-click, or press **G** to have them follow your hero.
   - **Target priority** (like League of Legends minions and towers): troops and towers first hit an enemy hero attacking your hero, then anything attacking your hero, then anything attacking your units, then the nearest unit, then buildings, and enemy heroes last. They stay on a target instead of flickering between targets. Jungle camps fight whoever pulled them and give up past their leash.
   - Every faction's heavy and special troops are different:
@@ -80,6 +83,7 @@ The full reasoning, and how other open-source MOBAs do it, is in [docs/CONTROLS.
   - Mordor: Gothmog, the Witch-king, Shelob.
   - Isengard: Uglúk, Saruman, Lurtz.
   - You get a skill point per level. Spend it with **Ctrl+Q/W/E/R**; each ability has 3 ranks. Abilities stun, root, slow and weaken.
+  - Legends (Aragorn, Théoden, the Witch-king, Shelob, Saruman) are 10% stronger than captains, but level matters most: a level-1 hero can lose to one squadron, a level-10 hero cuts through them.
   - Mana is limited, so choose when to cast; an ability you can't afford won't start aiming. Stand next to your Town Center to heal and refill mana quickly. Heroes walk through units.
 - **The Wild:**
   - Spider and warg camps sit between the lanes. They ignore you until struck, then the whole camp fights back. Pull them too far and they go home and heal.

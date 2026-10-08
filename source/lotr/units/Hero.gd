@@ -32,6 +32,8 @@ func _ready():
 	mana_regen = data.get("mana_regen", 2.0)
 	auto_acquire = false  # heroes only fight when told to (or when attacked, see below)
 	home_position = global_position
+	if not puppet:
+		recompute_stats()  # applies the legend/captain tier from level 1
 
 
 func is_alive():
@@ -266,6 +268,9 @@ func _handle_unit_death():
 	set_dead(true)
 	if not puppet:
 		respawn_at = GameData.now() + GameData.hero_respawn_time(level)
+		var match_node = get_tree().get_first_node_in_group("lotr_match")
+		if match_node != null:
+			match_node.toast_player(player.slot_index, "%s has fallen! Your army loses heart (-20%% damage) until %s returns." % [display_name, display_name])
 		died_on_host.emit()
 		MatchSignals.unit_died.emit(self)
 

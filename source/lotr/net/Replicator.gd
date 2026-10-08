@@ -128,8 +128,20 @@ func _physics_process(delta):
 			_send_slow()
 
 
+# Fast snapshot: 12 bytes per unit (id u32, x/z as u16 in 2.5 mm steps, yaw u8, hp u16, flags
+# u8), and only units that changed since the last send, plus a full refresh every KEYFRAME_EVERY
+# sends (fast snapshots are unreliable, so a lost packet heals within a second).
+const POS_SCALE = 400.0
+const KEYFRAME_EVERY = 10
+var _last_sent = {}  # net_id -> [x, z, yaw, hp, flags]
+var _sends = 0
+
+
 func _send_fast():
-	var data = PackedFloat32Array()
+	_sends += 1
+	var keyframe = _sends % KEYFRAME_EVERY == 0
+	var data = PackedByteArray()
+	var seen = {}
 	for unit in get_tree().get_nodes_in_group("units") + _sheltered_villagers():
 		if unit.get("net_id") == null or unit.unit_kind == "building":
 			continue
@@ -138,12 +150,26 @@ func _send_fast():
 			flags |= FLAG_HIDDEN
 		if GameData.now() - unit.last_attack_at < FAST_INTERVAL + 0.02:
 			flags |= FLAG_ATTACKING
-		data.append(unit.net_id)
-		data.append(unit.global_position.x)
-		data.append(unit.global_position.z)
-		data.append(unit.global_transform.basis.get_euler().y)
-		data.append(unit.hp)
-		data.append(flags)
+		var x = clampi(int(unit.global_position.x * POS_SCALE), 0, 65535)
+		var z = clampi(int(unit.global_position.z * POS_SCALE), 0, 65535)
+		var yaw = int(fposmod(unit.global_transform.basis.get_euler().y, TAU) / TAU * 255.0)
+		var hp = clampi(int(unit.hp), 0, 65535)
+		var state = [x, z, yaw, hp, flags]
+		seen[unit.net_id] = true
+		if not keyframe and _last_sent.get(unit.net_id) == state:
+			continue
+		_last_sent[unit.net_id] = state
+		var at = data.size()
+		data.resize(at + 12)
+		data.encode_u32(at, unit.net_id)
+		data.encode_u16(at + 4, x)
+		data.encode_u16(at + 6, z)
+		data.encode_u8(at + 8, yaw)
+		data.encode_u16(at + 9, hp)
+		data.encode_u8(at + 11, flags)
+	for id in _last_sent.keys():
+		if not seen.has(id):
+			_last_sent.erase(id)
 	_rpc_fast.rpc(data, _fx_queue)
 	_fx_queue = []
 
@@ -165,7 +191,7 @@ func _send_slow():
 			{
 				"slot": p.slot_index, "res": p.resources(), "age": p.age, "defeated": p.defeated,
 				"store_cd": max(0.0, p.storehouse_ready_at - now), "income": p.income_per_min,
-				"bot": p.is_bot, "upgrades": p.upgrades,
+				"bot": p.is_bot, "upgrades": p.upgrades, "focus": p.focus, "shelter": p.shelter,
 			}
 		)
 	var heroes = []
@@ -192,7 +218,7 @@ func _send_slow():
 				"incoming": b.incoming, "assign": b.assignment,
 				"villagers": b.alive_villagers().size() if b.building_key == "village_house" else 0,
 				"respawn": b.respawn_left, "age_target": b.age_target, "age_progress": b.age_progress,
-				"research": b.research_key, "research_left": b.research_left,
+				"research": b.research_key, "research_left": b.research_left, "gate": b.gate_open,
 			}
 		)
 	var squad_list = []
@@ -203,7 +229,7 @@ func _send_slow():
 		if _resource_amounts_sent.get(r.net_id, -1) != r.amount:
 			_resource_amounts_sent[r.net_id] = r.amount
 			resources[r.net_id] = r.amount
-	_rpc_slow.rpc(players, heroes, buildings, squad_list, resources)
+	_rpc_slow.rpc(players, heroes, buildings, squad_list, resources, _match.tower_progress())
 
 
 func squad_summaries() -> Array:
@@ -241,29 +267,36 @@ func _rpc_despawn(net_id):
 
 
 @rpc("authority", "unreliable_ordered")
-func _rpc_fast(data: PackedFloat32Array, fx_list):
+func _rpc_fast(data: PackedByteArray, fx_list):
 	var i = 0
-	while i + 6 <= data.size():
-		var net_id = int(data[i])
+	while i + 12 <= data.size():
+		var net_id = data.decode_u32(i)
 		var unit = _match.by_net_id(net_id)
 		if unit != null:
-			_targets[net_id] = [Vector3(data[i + 1], unit.global_position.y, data[i + 2]), data[i + 3]]
-			var new_hp = int(data[i + 4])
+			var x = data.decode_u16(i + 4) / POS_SCALE
+			var z = data.decode_u16(i + 6) / POS_SCALE
+			var yaw = data.decode_u8(i + 8) / 255.0 * TAU
+			_targets[net_id] = [Vector3(x, unit.global_position.y, z), yaw]
+			var new_hp = data.decode_u16(i + 9)
 			if unit.hp != new_hp and new_hp > 0:
 				unit.hp = new_hp
-			var hidden = (int(data[i + 5]) & FLAG_HIDDEN) != 0
-			if (int(data[i + 5]) & FLAG_ATTACKING) != 0 and GameData.now() - unit.last_attack_at > 0.3:
+			var flags = data.decode_u8(i + 11)
+			var hidden = (flags & FLAG_HIDDEN) != 0
+			if (flags & FLAG_ATTACKING) != 0 and GameData.now() - unit.last_attack_at > 0.3:
 				unit.notify_attack()
 			if unit.unit_kind == "villager":
 				unit.find_child("Geometry").visible = not hidden
-		i += 6
+		i += 12
 	for f in fx_list:
 		if _match.hud != null:
 			_match.hud.play_fx(f[0], f[1], f[2])
 
 
 @rpc("authority", "reliable")
-func _rpc_slow(players, heroes, buildings, squad_list, resources):
+func _rpc_slow(players, heroes, buildings, squad_list, resources, towers = []):
+	for i in range(min(towers.size(), _match.tower_state.size())):
+		_match.tower_state[i].progress = towers[i][0]
+		_match.tower_state[i].claimer = towers[i][1]
 	_heard_from_host = true
 	var now = GameData.now()
 	for pd in players:
@@ -277,6 +310,8 @@ func _rpc_slow(players, heroes, buildings, squad_list, resources):
 		p.income_per_min = pd.income
 		p.is_bot = pd.bot
 		p.upgrades = pd.upgrades
+		p.focus = pd.get("focus", "balanced")
+		p.shelter = pd.get("shelter", false)
 	for hd in heroes:
 		var h = _match.by_net_id(hd.id)
 		if h == null:
@@ -319,6 +354,7 @@ func _rpc_slow(players, heroes, buildings, squad_list, resources):
 		b.age_progress = bd.age_progress
 		b.research_key = bd.research
 		b.research_left = bd.research_left
+		b.gate_open = bd.get("gate", false)
 	squads.clear()
 	for s in squad_list:
 		squads[s.id] = s

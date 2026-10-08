@@ -21,7 +21,10 @@ const NEUTRAL_SLOT = -1
 var match_settings = {}  # {"slots": [...], "seed": int}
 var players_by_slot = {}
 var local_player = null
-var lanes = []
+var lanes = []  # the road network (MapGen.build_lanes)
+var targets = []  # where squads can march: enemy bases, forgotten towers, jungle camps
+var tower_state = []  # per forgotten tower: {building, progress, claimer}; progress replicated
+var _tower_tick_left = 0.0
 var replicator = null
 var hud = null
 var hero_controller = null
@@ -47,6 +50,9 @@ func _ready():
 	GameData.reset_clock()
 	seed(int(match_settings.get("seed", 0)))
 	lanes = map.get_meta("lanes")
+	targets = _build_targets()
+	for site in MapGen.tower_sites():
+		tower_state.append({"site": site, "building": null, "progress": 0.0, "claimer": -1})
 	# the navigation meshes are resources shared by every Match instance; give this match its
 	# own copies, or a second match in the same session starts from the first one's bake
 	for region in navigation.find_children("*", "NavigationRegion3D", true, false):
@@ -325,9 +331,12 @@ func on_creature_slain(creature, killer_player):
 		fx("horn", creature.global_position, creature.global_position)
 
 
-func spawn_building(p, key: String, position: Vector3, under_construction = true):
+func spawn_building(p, key: String, position: Vector3, under_construction = true, yaw = 0.0, extra_params = {}):
 	var params = {"kind": "building", "building": key, "faction": p.faction}
-	return spawn_unit(params, position, p, {"under_construction": under_construction})
+	if yaw != 0.0:
+		params["yaw"] = yaw
+	params.merge(extra_params)
+	return spawn_unit(params, position, p, {"under_construction": under_construction, "yaw": yaw})
 
 
 func spawn_unit(params: Dictionary, position: Vector3, p, extra = {}):
@@ -414,11 +423,42 @@ func spawn_squadron(p, unit_class: String, building, lane_index: int):
 			)
 		)
 	var squad = make_squadron(p, unit_class, units, building.global_position)
-	if lane_index >= 0 and lane_index < lanes.size():
-		squad.march(MapGen.lane_points_from(lanes[lane_index], p.slot_index))
+	var path = route_points(lane_index, building.global_position)
+	if not path.is_empty():
+		squad.march(path)
 	else:
 		squad.order_defend(front + out_dir * 3.0)
 	return squad
+
+
+# --- march targets and roads ------------------------------------------------------------------------
+func _build_targets() -> Array:
+	var out = []
+	var spawns = MapGen.spawn_points()
+	for i in range(spawns.size()):
+		out.append({"kind": "base", "slot": i, "node": "B%d" % i, "pos": spawns[i]})
+	var sites = MapGen.tower_sites()
+	for i in range(sites.size()):
+		out.append({"kind": "tower", "tower": i, "node": sites[i].id, "pos": sites[i].pos, "name": sites[i].name})
+	var camps = MapGen.camp_sites()
+	for i in range(camps.size()):
+		if camps[i].camp == "herd":
+			continue
+		out.append({"kind": "camp", "camp": camps[i].camp, "node": MapGen.nearest_node(camps[i].pos), "pos": camps[i].pos})
+	for i in range(out.size()):
+		out[i]["index"] = i
+	return out
+
+
+func route_points(target_index: int, from: Vector3) -> Array:
+	"""Road waypoints from a position to a march target; [] for 'stay'."""
+	if target_index < 0 or target_index >= targets.size():
+		return []
+	var t = targets[target_index]
+	var path = MapGen.route(lanes, MapGen.nearest_node(from), t.node)
+	if t.kind == "camp" or path.is_empty():
+		path.append(t.pos)
+	return path
 
 
 func make_squadron(p, unit_class, units, home):
@@ -439,19 +479,87 @@ func squad_by_id(squad_id):
 
 
 func lanes_for_player(p) -> Array:
-	return lanes.filter(func(l): return l.a == p.slot_index or l.b == p.slot_index)
+	"""March targets offered to a player: enemy bases, every forgotten tower, the camps."""
+	var out = []
+	for t in targets:
+		if t.kind == "base":
+			var owner = player_for_slot(t.slot)
+			if owner == null or owner == p or Teams.is_ally(owner, p):
+				continue
+		out.append(t)
+	return out
 
 
-func lane_label(lane_index: int, p) -> String:
-	var lane = lanes[lane_index]
-	var other = lane.b if lane.a == p.slot_index else lane.a
-	var other_player = player_for_slot(other)
-	var who = other_player.player_name if other_player != null else "empty base"
-	var relation = ""
-	if other_player != null:
-		relation = " (ally)" if Teams.is_ally(other_player, p) else " (enemy)"
-	var lane_name = "Mid" if lane.name.ends_with("Mid") else lane.name
-	return "%s lane → %s%s" % [lane_name, who, relation]
+func lane_label(target_index: int, p) -> String:
+	var t = targets[target_index]
+	match t.kind:
+		"base":
+			var owner = player_for_slot(t.slot)
+			return "Attack %s (%s)" % [owner.player_name, GameData.FACTIONS[owner.faction].name] if owner != null else "Empty base"
+		"tower":
+			var held_by = tower_holder(t.tower)
+			var who = (" (held by %s)" % held_by.player.player_name) if held_by != null else ""
+			return "Tower: %s%s" % [t.name, who]
+		"camp":
+			return "Hunt: %s camp" % ("Cave Troll" if t.camp == "troll" else t.camp.capitalize().trim_suffix("s"))
+	return "?"
+
+
+# --- forgotten towers (host) ---------------------------------------------------------------------
+const TOWER_CLAIM_TIME = 10.0
+const TOWER_CLAIM_RANGE = 5.0
+const TOWER_CONTEST_RANGE = 10.0
+
+
+func _towers_tick(delta):
+	for st in tower_state:
+		if st.building != null and is_instance_valid(st.building) and st.building.is_alive():
+			st.progress = 0.0
+			st.claimer = -1
+			continue
+		st.building = null
+		var claimer = null
+		var contested = false
+		for h in get_tree().get_nodes_in_group("heroes"):
+			if not h.is_alive():
+				continue
+			var d = h.global_position_yless.distance_to(st.site.pos * Vector3(1, 0, 1))
+			if d <= TOWER_CLAIM_RANGE and claimer == null:
+				claimer = h.player
+			elif d <= TOWER_CONTEST_RANGE and claimer != null and Teams.is_enemy(h.player, claimer):
+				contested = true
+		# a second pass catches an enemy that was seen before the claimer
+		if claimer != null:
+			for h in get_tree().get_nodes_in_group("heroes"):
+				if h.is_alive() and Teams.is_enemy(h.player, claimer) and h.global_position_yless.distance_to(st.site.pos * Vector3(1, 0, 1)) <= TOWER_CONTEST_RANGE:
+					contested = true
+		if claimer == null or contested:
+			st.progress = max(0.0, st.progress - delta / TOWER_CLAIM_TIME)
+			continue
+		if st.claimer != claimer.slot_index:
+			st.claimer = claimer.slot_index
+			st.progress = 0.0
+		st.progress += delta / TOWER_CLAIM_TIME
+		if st.progress >= 1.0:
+			st.progress = 0.0
+			st.claimer = -1
+			st.building = spawn_building(claimer, "watchtower", st.site.pos, false)
+			st.building.set_meta("forgotten", st.site.name)
+			broadcast_toast("%s claimed the forgotten tower on the %s" % [claimer.player_name, st.site.name])
+			fx("horn", st.site.pos, st.site.pos)
+
+
+func tower_holder(i: int):
+	"""The claimed tower standing on forgotten-tower site i, on host and clients alike."""
+	var pos = tower_state[i].site.pos
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.building_key == "watchtower" and b.is_alive() and b.global_position_yless.distance_to(pos * Vector3(1, 0, 1)) < 1.5:
+			return b
+	return null
+
+
+func tower_progress() -> Array:
+	return tower_state.map(func(st): return [snappedf(st.progress, 0.01), st.claimer])
 
 
 # --- commands (host) --------------------------------------------------------------------------
@@ -473,6 +581,7 @@ func _register_commands():
 	CommandBus.register("squad_order", _cmd_squad_order)
 	CommandBus.register("assign_villagers", _cmd_assign_villagers)
 	CommandBus.register("build", _cmd_build)
+	CommandBus.register("build_wall", _cmd_build_wall)
 	CommandBus.register("cancel_build", _cmd_cancel_build)
 	CommandBus.register("set_auto_repeat", _cmd_set_auto_repeat)
 	CommandBus.register("train", _cmd_train)
@@ -627,14 +736,32 @@ func _cmd_squad_order(cmd):
 				squad.order_return()
 			"follow":
 				squad.order_follow()
-			"lane":
-				var lane_index = int(cmd.get("lane", -1))
-				if lane_index >= 0 and lane_index < lanes.size():
-					squad.order_lane(MapGen.lane_points_from(lanes[lane_index], p.slot_index))
+			"lane", "route":
+				var path = route_points(int(cmd.get("lane", -1)), squad.center())
+				if not path.is_empty():
+					squad.order_lane(path)
 	return ""
 
 
 func _cmd_assign_villagers(cmd):
+	"""Villagers are automatic: this sets the player's focus (balanced / a resource) or
+	shelters everyone ("home" toggles)."""
+	var p = player_for_slot(cmd.player)
+	if p == null:
+		return ""
+	var a = cmd.get("assignment", "balanced")
+	if a == "home":
+		p.shelter = not p.shelter
+		return ""
+	if a != "balanced" and a not in GameData.GATHERABLE:
+		return ""
+	p.shelter = false
+	p.focus = a
+	p.rebalance_villagers()
+	return ""
+
+
+func _old_assign_villagers(cmd):
 	var hero = _alive_hero(cmd)
 	var house = by_net_id(cmd.house)
 	if hero == null or house == null or house.player != hero.player:
@@ -676,6 +803,71 @@ func _cmd_build(cmd):
 	p.subtract_resources(data.cost)
 	spawn_building(p, key, pos, true)
 	return ""
+
+
+func _cmd_build_wall(cmd):
+	"""Drag-placed wall: split the line into segments; segments on a road become gates."""
+	var hero = _alive_hero(cmd)
+	if hero == null:
+		return "Your hero is dead"
+	var p = hero.player
+	var key = cmd.get("building", "wall")
+	if not key in ["wall", "stone_wall"]:
+		return ""
+	var data = GameData.BUILDINGS[key]
+	if data.age > p.age:
+		return "Requires the %s Age" % GameData.AGE_NAMES[data.age]
+	var a: Vector3 = cmd.from
+	var b: Vector3 = cmd.to
+	a.y = 0.0
+	b.y = 0.0
+	var length = a.distance_to(b)
+	if length < 1.0:
+		return "Drag a longer line"
+	if length > GameData.WALL_MAX_LENGTH:
+		b = a + (b - a).normalized() * GameData.WALL_MAX_LENGTH
+		length = GameData.WALL_MAX_LENGTH
+	var n = maxi(1, int(round(length / GameData.WALL_SEGMENT)))
+	var dir = (b - a).normalized()
+	var yaw = atan2(-dir.z, dir.x)  # local +X of a wall piece runs along the line
+	var pieces = []
+	for i in range(n):
+		var c = a + dir * GameData.WALL_SEGMENT * (i + 0.5)
+		if _wall_spot_blocked(c):
+			continue
+		pieces.append([c, "gate" if _on_road(c) else key])
+	if pieces.is_empty():
+		return "Something is in the way"
+	var cost = {}
+	for piece in pieces:
+		for res in GameData.BUILDINGS[piece[1]].cost:
+			cost[res] = cost.get(res, 0) + GameData.BUILDINGS[piece[1]].cost[res]
+	if not p.has_resources(cost):
+		return p.missing_text(cost)
+	p.subtract_resources(cost)
+	for piece in pieces:
+		spawn_building(p, piece[1], piece[0], true, yaw, {"stone": key == "stone_wall"})
+	return ""
+
+
+func _on_road(pos: Vector3) -> bool:
+	for lane in lanes:
+		for pt in lane.points:
+			if Vector2(pt.x - pos.x, pt.z - pos.z).length() < GameData.GATE_ROAD_DISTANCE:
+				return true
+	return false
+
+
+func _wall_spot_blocked(pos: Vector3) -> bool:
+	if pos.x < 2 or pos.z < 2 or pos.x > MapGen.SIZE - 2 or pos.z > MapGen.SIZE - 2:
+		return true
+	for bld in get_tree().get_nodes_in_group("buildings"):
+		if bld.is_alive() and bld.global_position_yless.distance_to(pos) < bld.stats_size() + 0.9:
+			return true
+	for r in get_tree().get_nodes_in_group("lotr_resources"):
+		if r.global_position_yless.distance_to(pos) < 1.4:
+			return true
+	return false
 
 
 func placement_blocker(key: String, pos: Vector3) -> String:
@@ -780,11 +972,18 @@ func _cmd_research(cmd):
 func _physics_process(delta):
 	if ended or not started or not is_host():
 		return
+	_tower_tick_left -= delta
+	if _tower_tick_left <= 0.0:
+		_tower_tick_left = 0.25
+		_towers_tick(0.25)
 	_win_check_left -= delta
 	if _win_check_left > 0.0:
 		return
 	_win_check_left = WIN_CHECK_INTERVAL
 	_camps_tick()
+	for p in players_by_slot.values():
+		if not p.defeated:
+			p.rebalance_villagers()
 	for p in players_by_slot.values():
 		if not p.defeated and p.town_centers().is_empty():
 			_defeat(p)

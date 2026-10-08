@@ -1,32 +1,39 @@
 class_name MapGen
-## Builds the 4-base, 6-lane "Middle-earth" map. Deterministic from the seed so the host and
+## Builds the 4-base "Middle-earth" battlefield. Deterministic from the seed so the host and
 ## every client generate the same map (resource nodes get the same net ids in the same order).
 ##
-##  base 0 (Gondor) ------- north lane ------- base 1 (Mordor)
-##        |   \                               /   |
-##   west lane   diagonal         diagonal    east lane
-##        |   /                               \   |
-##  base 2 (Rohan) -------- south lane ------- base 3 (Isengard)
+## Town Centers sit a third of the way in from the corners, open on every side. Winding roads
+## join them (3 roads into every town) through 8 forgotten towers that heroes can claim:
+##
+##        B0 ---- T_N ---- B1          B = base (Town Center), T = forgotten tower,
+##        |  \           /  |          C = the Cave Troll's lair in the middle.
+##       T_W   D0     D1   T_E          Roads: B-T_N-B, B-T_W-B, B-D-C (diagonals)...
+##        |      \ C /      |
+##        |      /   \      |
+##       ...   D2     D3   ...
+##        B2 ---- T_S ---- B3
 
 const MapScene = preload("res://source/match/Map.tscn")
 
-const SIZE = 140.0
-const INSET = 16.0
+const SIZE = 160.0
+const INSET = 44.0  # Town Centers this far in from each edge
 const LANE_STEP = 8.0
 const LANE_CLEARANCE = 5.0
 const HILL_TINT = Color(0.62, 0.7, 0.5)  # calms the pack's bright yellow grass to a meadow green
 const GRASS = Color("5c7d3a")
 
-# lanes: pairs of spawn indices. With the default teams (0+2 vs 1+3) the west and east edges
-# are the ally routes, the rest are enemy lanes.
-const LANE_DEFS = [
-	{"a": 0, "b": 1, "name": "Top"},
-	{"a": 2, "b": 3, "name": "Bottom"},
-	{"a": 0, "b": 2, "name": "Left"},
-	{"a": 1, "b": 3, "name": "Right"},
-	{"a": 0, "b": 3, "name": "Diagonal Mid"},
-	{"a": 1, "b": 2, "name": "Diagonal Mid"},
+# road graph edges: node ids (see road_nodes); "name" is what the HUD shows
+const ROAD_DEFS = [
+	["B0", "T_N"], ["T_N", "B1"], ["B2", "T_S"], ["T_S", "B3"],
+	["B0", "T_W"], ["T_W", "B2"], ["B1", "T_E"], ["T_E", "B3"],
+	["B0", "D0"], ["D0", "C"], ["B1", "D1"], ["D1", "C"],
+	["B2", "D2"], ["D2", "C"], ["B3", "D3"], ["D3", "C"],
 ]
+const TOWER_NAMES = {
+	"T_N": "North road", "T_S": "South road", "T_W": "West road", "T_E": "East road",
+	"D0": "North-west crossing", "D1": "North-east crossing", "D2": "South-west crossing",
+	"D3": "South-east crossing",
+}
 
 
 static func spawn_points() -> Array:
@@ -36,6 +43,28 @@ static func spawn_points() -> Array:
 		Vector3(INSET, 0, SIZE - INSET),
 		Vector3(SIZE - INSET, 0, SIZE - INSET),
 	]
+
+
+static func road_nodes() -> Dictionary:
+	var c = SIZE / 2.0
+	var center = Vector3(c, 0, c)
+	var b = spawn_points()
+	var edge = 22.0  # outer roads bow out towards the map edge
+	var nodes = {"C": center, "T_N": Vector3(c, 0, edge), "T_S": Vector3(c, 0, SIZE - edge),
+		"T_W": Vector3(edge, 0, c), "T_E": Vector3(SIZE - edge, 0, c)}
+	for i in range(4):
+		nodes["B%d" % i] = b[i]
+		nodes["D%d" % i] = b[i].lerp(center, 0.5)
+	return nodes
+
+
+static func tower_sites() -> Array:
+	"""Forgotten towers: [{id, name, pos}] in a fixed order (index = tower number)."""
+	var nodes = road_nodes()
+	var out = []
+	for id in ["T_N", "T_E", "T_S", "T_W", "D0", "D1", "D3", "D2"]:
+		out.append({"id": id, "name": TOWER_NAMES[id], "pos": nodes[id]})
+	return out
 
 
 static func build(seed_value: int) -> Node3D:
@@ -70,49 +99,107 @@ static func build(seed_value: int) -> Node3D:
 	map.set_meta("lanes", lanes)
 	_paint_lanes(map, lanes)
 	_place_resources(map, rng, spawns, lanes)
+	_place_tower_ruins(map)
 	_place_decorations(map, rng, spawns, lanes)
 	return map
 
 
+static func _place_tower_ruins(map):
+	# the forgotten towers start as overgrown ruins; a claimed tower is built on top
+	var root = map.find_child("Decorations")
+	for site in tower_sites():
+		var ruin = Art.prop("building_destroyed", 3.4, Color(0.75, 0.78, 0.72))
+		ruin.position = site.pos
+		ruin.rotation.y = site.pos.x * 0.37
+		root.add_child(ruin)
+		var stone = Art.prop("rock_single_D", 1.2, Color(0.8, 0.8, 0.78))
+		stone.position = site.pos + Vector3(2.2, 0, 1.4)
+		root.add_child(stone)
+
+
 static func build_lanes() -> Array:
-	var spawns = spawn_points()
+	"""Every road as {index, a, b, name, points}; a and b are road node ids."""
+	var nodes = road_nodes()
 	var lanes = []
-	for i in range(LANE_DEFS.size()):
-		var d = LANE_DEFS[i]
-		var a = spawns[d.a]
-		var b = spawns[d.b]
-		var points = []
+	for i in range(ROAD_DEFS.size()):
+		var a_id = ROAD_DEFS[i][0]
+		var b_id = ROAD_DEFS[i][1]
+		var a = nodes[a_id]
+		var b = nodes[b_id]
 		var dir = (b - a).normalized()
-		var start = a + dir * 6.0
-		var end = b - dir * 6.0
+		var start = a + (dir * 6.0 if a_id.begins_with("B") else Vector3.ZERO)
+		var end = b - (dir * 6.0 if b_id.begins_with("B") else Vector3.ZERO)
 		var length = start.distance_to(end)
-		# lanes wind: an S-curve offset sideways from the straight line, zero at both ends (and
-		# at the middle of the diagonals, so they still cross at the Cave Troll's lair)
+		# roads wind: an S-curve offset sideways from the straight line, zero at both ends
 		var side = Vector3(-dir.z, 0, dir.x)
-		var diagonal = d.name.ends_with("Mid")
-		var amplitude = 9.0 if diagonal else 7.5
+		var amplitude = 5.5
 		var steps = maxi(2, int(length / 4.0))
+		var points = []
 		for s in range(steps + 1):
 			var t = float(s) / steps
 			var p = start.lerp(end, t) + side * amplitude * sin(TAU * t) * sin(PI * t) * (1.0 if i % 2 == 0 else -1.0)
 			p.x = clamp(p.x, 6.0, SIZE - 6.0)
 			p.z = clamp(p.z, 6.0, SIZE - 6.0)
 			points.append(p)
-		lanes.append({"index": i, "a": d.a, "b": d.b, "name": d.name, "points": points})
+		lanes.append({"index": i, "a": a_id, "b": b_id, "name": "%s-%s" % [a_id, b_id], "points": points})
 	return lanes
 
 
-static func lane_points_from(lane: Dictionary, spawn_index: int) -> Array:
-	"""Lane waypoints ordered starting at the given base."""
-	var points = lane.points.duplicate()
-	if lane.b == spawn_index:
-		points.reverse()
+static func route(lanes: Array, from_node: String, to_node: String) -> Array:
+	"""Waypoints along the roads from one node to another (Dijkstra on the road graph)."""
+	var dist = {from_node: 0.0}
+	var prev = {}
+	var open = [from_node]
+	var done = {}
+	while not open.is_empty():
+		open.sort_custom(func(x, y): return dist[x] < dist[y])
+		var n = open.pop_front()
+		if done.has(n):
+			continue
+		done[n] = true
+		if n == to_node:
+			break
+		for lane in lanes:
+			var other = lane.b if lane.a == n else (lane.a if lane.b == n else "")
+			if other == "" or done.has(other):
+				continue
+			var nd = dist[n] + lane.points[0].distance_to(lane.points[-1])
+			if nd < dist.get(other, INF):
+				dist[other] = nd
+				prev[other] = [n, lane]
+				open.append(other)
+	if not prev.has(to_node) and from_node != to_node:
+		return []
+	var chain = []
+	var cur = to_node
+	while cur != from_node:
+		chain.push_front(prev[cur])
+		cur = prev[cur][0]
+	var points = []
+	for step in chain:
+		var lane = step[1]
+		var pts = lane.points.duplicate()
+		if lane.a != step[0]:
+			pts.reverse()
+		points.append_array(pts)
 	return points
 
 
+static func nearest_node(point: Vector3) -> String:
+	var best = ""
+	var best_d = INF
+	var nodes = road_nodes()
+	for id in nodes:
+		var d = nodes[id].distance_to(point)
+		if d < best_d:
+			best_d = d
+			best = id
+	return best
+
+
 static func camp_sites() -> Array:
-	"""Jungle camps: three in each wedge of land between the lanes, the Cave Troll's lair in the
-	middle where the diagonal lanes cross, and two deer herds outside every base."""
+	"""Jungle camps in the four wedges between the roads, the Cave Troll's lair in the middle,
+	and two deer herds in the open land behind every base."""
 	var c = SIZE / 2.0
 	var center = Vector3(c, 0, c)
 	var lanes = build_lanes()
@@ -121,22 +208,17 @@ static func camp_sites() -> Array:
 	for i in range(wedges.size()):
 		var out = wedges[i]
 		var side = Vector3(-out.z, 0, out.x)
-		var base = center + out * SIZE * 0.3
 		var a = "spiders" if i % 2 == 0 else "wargs"
 		var b = "wargs" if i % 2 == 0 else "spiders"
-		for spot in [[a, base + side * 13.0], [b, base - side * 13.0], [b, center + out * 21.0]]:
+		for spot in [[a, center + out * 30.0 + side * 13.0], [b, center + out * 30.0 - side * 13.0], [b, center + out * 16.0]]:
 			sites.append({"camp": spot[0], "pos": _push_off_lanes(spot[1], lanes)})
 	for spawn in spawn_points():
-		var to_center = (center - spawn).normalized()
-		var ang = atan2(to_center.z, to_center.x)
-		for off in [-0.4, 0.4]:
-			var p = spawn + Vector3(cos(ang + off), 0, sin(ang + off)) * 30.0
+		var away = (spawn - center).normalized()
+		var ang = atan2(away.z, away.x)
+		for off in [-0.6, 0.6]:
+			var p = spawn + Vector3(cos(ang + off), 0, sin(ang + off)) * 24.0
 			sites.append({"camp": "herd", "pos": _push_off_lanes(p, lanes)})
 	return sites
-
-
-static func lanes_for(spawn_index: int) -> Array:
-	return build_lanes().filter(func(l): return l.a == spawn_index or l.b == spawn_index)
 
 
 static func _paint_lanes(map, lanes):
@@ -282,6 +364,8 @@ static func _place_decorations(map, rng, spawns, lanes):
 		if spawns.any(func(sp): return sp.distance_to(p) < GameData.BASE_RADIUS + 3.0):
 			continue
 		if camp_sites().any(func(c): return c.pos.distance_to(p) < 6.0 + width * 0.5):
+			continue
+		if tower_sites().any(func(t): return t.pos.distance_to(p) < 7.0 + width * 0.5):
 			continue
 		var prop = Art.prop(pick[0], width, HILL_TINT if pick[0].begins_with("hills") else Color(1, 1, 1))
 		prop.position = p

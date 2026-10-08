@@ -138,7 +138,7 @@ func _run_step():
 		7:
 			var b = _data.barracks
 			check("barracks finishes", b.is_constructed(), "(%.2f)" % b.progress)
-			var lanes = _match.lanes_for_player(_me).filter(func(l): return Teams.is_enemy(_match.player_for_slot(l.b if l.a == 0 else l.a), _me))
+			var lanes = _match.lanes_for_player(_me).filter(func(t): return t.kind == "base")
 			_data.squads_before = _match._next_squad_id
 			cmd({"type": "set_auto_repeat", "building": b.net_id, "enabled": true, "lane": lanes[0].index})
 			wait(5)
@@ -401,6 +401,35 @@ func _run_step():
 			for m in camp.members:
 				Combat.deal_damage(hero(), m, 99999, true)
 			check("clearing a camp pays Gold", _me.gold >= _data.gold_before + 3 * GameData.CREATURES.spider.gold, "(%d -> %d)" % [_data.gold_before, _me.gold])
+			# forgotten towers: march targets follow the roads, and standing on a ruin claims it
+			var path = _match.route_points(_match.targets.filter(func(t): return t.kind == "tower")[0].index, tc().global_position)
+			check("march routes follow the road network", path.size() > 5, "(%d waypoints)" % path.size())
+			var free = -1
+			for i in range(_match.tower_state.size()):
+				if _match.tower_holder(i) == null:
+					free = i
+					break
+			_data.tower = free
+			hero().global_position = _match.tower_state[free].site.pos + Vector3(1.5, 0, 0)
+			hero().order_stop()
+			wait(_match.TOWER_CLAIM_TIME + 1.5)
+		32:
+			var holder = _match.tower_holder(_data.tower)
+			check("standing on a forgotten tower claims it", holder != null and holder.player == _me, "(%s)" % (holder.player.player_name if holder != null else "nobody"))
+			# walls: a wall dragged across one of our roads gets a gate where it crosses
+			var road = _match.lanes.filter(func(l): return l.a == "B0")[0]
+			var mid = road.points[3]
+			var along = (road.points[4] - road.points[2]).normalized()
+			var across = Vector3(-along.z, 0, along.x)
+			_data.gates_before = _me.buildings("gate").size()
+			_data.walls_before = _me.buildings("wall").size()
+			hero().global_position = mid + across * 2.0
+			hero().order_stop()
+			cmd({"type": "build_wall", "building": "wall", "from": mid - across * 6.0, "to": mid + across * 6.0})
+			wait(0.5)
+		33:
+			check("dragging a wall places wall pieces", _me.buildings("wall").size() > _data.walls_before, "(%d pieces)" % (_me.buildings("wall").size() - _data.walls_before))
+			check("a wall across a road gets a gate", _me.buildings("gate").size() > _data.gates_before)
 			_finish()
 
 

@@ -188,7 +188,7 @@ const HEROES = {
 	# --- Gondor -----------------------------------------------------------------------------
 	"aragorn":
 	{
-		"name": "Aragorn", "faction": "gondor", "role": "Fighter",
+		"tier": "legend", "name": "Aragorn", "faction": "gondor", "role": "Fighter",
 		"hp": 650, "mana": 200, "damage": 28, "interval": 1.0, "range": 1.8, "speed": 4.0,
 		"sight": 12.0, "hp_per_level": 70, "damage_per_level": 4, "mana_regen": 0.8,
 		"abilities":
@@ -209,7 +209,7 @@ const HEROES = {
 	},
 	"boromir":
 	{
-		"name": "Boromir", "faction": "gondor", "role": "Vanguard",
+		"tier": "captain", "name": "Boromir", "faction": "gondor", "role": "Vanguard",
 		"hp": 760, "mana": 180, "damage": 25, "interval": 1.05, "range": 1.8, "speed": 3.9,
 		"sight": 11.0, "hp_per_level": 85, "damage_per_level": 3, "mana_regen": 0.8,
 		"abilities":
@@ -229,7 +229,7 @@ const HEROES = {
 	},
 	"faramir":
 	{
-		"name": "Faramir", "faction": "gondor", "role": "Ranger",
+		"tier": "captain", "name": "Faramir", "faction": "gondor", "role": "Ranger",
 		"hp": 540, "mana": 210, "damage": 26, "interval": 1.1, "range": 7.5, "speed": 4.1,
 		"sight": 13.0, "hp_per_level": 60, "damage_per_level": 4, "mana_regen": 0.96,
 		"ranged": true,
@@ -253,7 +253,7 @@ const HEROES = {
 	# --- Rohan --------------------------------------------------------------------------------
 	"theoden":
 	{
-		"name": "Théoden", "faction": "rohan", "role": "Enchanter",
+		"tier": "legend", "name": "Théoden", "faction": "rohan", "role": "Enchanter",
 		"hp": 600, "mana": 220, "damage": 24, "interval": 1.0, "range": 1.8, "speed": 4.2,
 		"sight": 12.0, "hp_per_level": 65, "damage_per_level": 3, "mana_regen": 1.0,
 		"abilities":
@@ -272,7 +272,7 @@ const HEROES = {
 	},
 	"eomer":
 	{
-		"name": "Éomer", "faction": "rohan", "role": "Fighter",
+		"tier": "captain", "name": "Éomer", "faction": "rohan", "role": "Fighter",
 		"hp": 640, "mana": 190, "damage": 27, "interval": 1.0, "range": 1.9, "speed": 4.3,
 		"sight": 12.0, "hp_per_level": 72, "damage_per_level": 4, "mana_regen": 0.8,
 		"abilities":
@@ -294,7 +294,7 @@ const HEROES = {
 	},
 	"eowyn":
 	{
-		"name": "Éowyn", "faction": "rohan", "role": "Assassin",
+		"tier": "captain", "name": "Éowyn", "faction": "rohan", "role": "Assassin",
 		"hp": 560, "mana": 180, "damage": 29, "interval": 0.9, "range": 1.7, "speed": 4.3,
 		"sight": 12.0, "hp_per_level": 62, "damage_per_level": 5, "mana_regen": 0.8,
 		"abilities":
@@ -315,7 +315,7 @@ const HEROES = {
 	# --- Mordor -------------------------------------------------------------------------------
 	"gothmog":
 	{
-		"name": "Gothmog", "faction": "mordor", "role": "Vanguard",
+		"tier": "captain", "name": "Gothmog", "faction": "mordor", "role": "Vanguard",
 		"hp": 780, "mana": 180, "damage": 24, "interval": 1.1, "range": 1.8, "speed": 3.8,
 		"sight": 11.0, "hp_per_level": 90, "damage_per_level": 3, "mana_regen": 0.8,
 		"abilities":
@@ -335,7 +335,7 @@ const HEROES = {
 	},
 	"witch_king":
 	{
-		"name": "Witch-king", "faction": "mordor", "role": "Enchanter",
+		"tier": "legend", "name": "Witch-king", "faction": "mordor", "role": "Enchanter",
 		"hp": 600, "mana": 240, "damage": 27, "interval": 1.1, "range": 1.9, "speed": 4.0,
 		"sight": 13.0, "hp_per_level": 68, "damage_per_level": 4, "mana_regen": 1.04,
 		"abilities":
@@ -356,7 +356,7 @@ const HEROES = {
 	},
 	"shelob":
 	{
-		"name": "Shelob", "faction": "mordor", "role": "Diver",
+		"tier": "legend", "name": "Shelob", "faction": "mordor", "role": "Diver",
 		"hp": 700, "mana": 170, "damage": 30, "interval": 1.0, "range": 1.9, "speed": 4.4,
 		"sight": 11.0, "hp_per_level": 78, "damage_per_level": 5, "mana_regen": 0.8,
 		"abilities":
@@ -376,7 +376,7 @@ const HEROES = {
 	# --- Isengard -----------------------------------------------------------------------------
 	"ugluk":
 	{
-		"name": "Uglúk", "faction": "isengard", "role": "Vanguard",
+		"tier": "captain", "name": "Uglúk", "faction": "isengard", "role": "Vanguard",
 		"hp": 770, "mana": 170, "damage": 26, "interval": 1.05, "range": 1.8, "speed": 3.9,
 		"sight": 11.0, "hp_per_level": 88, "damage_per_level": 3, "mana_regen": 0.8,
 		"abilities":
@@ -395,7 +395,7 @@ const HEROES = {
 	},
 	"saruman":
 	{
-		"name": "Saruman", "faction": "isengard", "role": "Caster",
+		"tier": "legend", "name": "Saruman", "faction": "isengard", "role": "Caster",
 		"hp": 520, "mana": 260, "damage": 24, "interval": 1.2, "range": 7.0, "speed": 3.9,
 		"sight": 13.0, "hp_per_level": 55, "damage_per_level": 4, "mana_regen": 1.2,
 		"ranged": true,
@@ -416,7 +416,7 @@ const HEROES = {
 	},
 	"lurtz":
 	{
-		"name": "Lurtz", "faction": "isengard", "role": "Diver",
+		"tier": "captain", "name": "Lurtz", "faction": "isengard", "role": "Diver",
 		"hp": 560, "mana": 180, "damage": 30, "interval": 1.2, "range": 7.0, "speed": 4.1,
 		"sight": 12.0, "hp_per_level": 60, "damage_per_level": 5, "mana_regen": 0.8,
 		"ranged": true,
@@ -488,6 +488,26 @@ const BUILDINGS = {
 		"build_time": 75.0, "age": 3, "size": 2.8, "sight": 8.0, "base_only": false,
 		"trains": "heavy",
 	},
+	# walls are placed by dragging a line; they are split into segments of WALL_SEGMENT metres.
+	# Where a segment crosses a road it becomes a gate: open for your units, shut on enemies.
+	"wall":
+	{
+		"name": "Palisade", "desc": "Drag to place a wooden wall. Where it crosses a road a gate is made automatically: your units pass, enemies must break it.",
+		"hp": 450, "cost": {"wood": 12}, "build_time": 3.0, "age": 1, "size": 0.5,
+		"sight": 3.0, "base_only": false, "wall": true,
+	},
+	"stone_wall":
+	{
+		"name": "Stone Wall", "desc": "Drag to place a strong stone wall (Kingdom Age). Gates are made where it crosses a road.",
+		"hp": 1400, "cost": {"stone": 16}, "build_time": 5.0, "age": 2, "size": 0.5,
+		"sight": 3.0, "base_only": false, "wall": true,
+	},
+	"gate":
+	{
+		"name": "Gate", "desc": "Opens for your units and shuts when enemies come near.",
+		"hp": 900, "cost": {"wood": 20}, "build_time": 5.0, "age": 1, "size": 0.5,
+		"sight": 5.0, "base_only": false, "wall": true, "gate": true, "buildable": false,
+	},
 	"special_building":
 	{
 		"name": "Special", "desc": "Trains your faction's elite unit (Rangers, Horse Archers, Mountain Trolls, Sappers).", "hp": 1400, "cost": {"wood": 200, "stone": 150, "gold": 50},
@@ -554,8 +574,11 @@ const UPGRADES = {
 
 const BUILD_MENU = [
 	"village_house", "barracks", "archery_range", "stables", "storehouse", "blacksmith",
-	"siege_works", "special_building", "watchtower",
+	"siege_works", "special_building", "watchtower", "wall", "stone_wall",
 ]
+const WALL_SEGMENT = 2.4  # metres per wall piece
+const WALL_MAX_LENGTH = 48.0  # longest wall in one drag
+const GATE_ROAD_DISTANCE = 2.6  # a wall piece this close to a road becomes a gate
 
 const AGES = {
 	2: {"name": "Kingdom", "cost": {"food": 200, "wood": 150, "stone": 50}, "time": 30.0},
@@ -710,11 +733,18 @@ func counter(attacker_class: String, target_kind: String) -> float:
 	return COUNTERS[attacker_class].get(target_kind, 1.0)
 
 
+# legends (Aragorn, Théoden, the Witch-king, Shelob, Saruman) are a little stronger than captains;
+# level matters more: a level-1 hero can lose to one squadron, a level-10 hero cuts through them
+const LEGEND_BONUS = 1.1
+const ARMY_LOST_HEART = 0.8  # damage multiplier for troops while their hero is dead
+
+
 func hero_stats_at_level(hero_key: String, level: int) -> Dictionary:
 	var h = HEROES[hero_key]
+	var tier = LEGEND_BONUS if h.get("tier", "captain") == "legend" else 1.0
 	return {
-		"hp": h["hp"] + h["hp_per_level"] * (level - 1),
-		"damage": h["damage"] + h["damage_per_level"] * (level - 1),
+		"hp": int((h["hp"] + h["hp_per_level"] * (level - 1)) * tier),
+		"damage": (h["damage"] + h["damage_per_level"] * (level - 1)) * tier,
 	}
 
 

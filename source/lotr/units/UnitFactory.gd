@@ -240,6 +240,8 @@ static func _create_building(params):
 	unit.display_name = data.name
 	unit.armor = 0.2
 	var geometry = _geometry(unit)
+	if data.get("wall", false):
+		return _finish_wall(unit, geometry, params, data)
 	var faction_color = GameData.FACTIONS[params.get("faction", "gondor")].color
 	var s = data.size
 	var model = Art.building(params.building, params.get("faction", "gondor"), s)
@@ -501,6 +503,62 @@ static func _deer(geometry):
 	_part(root, _sphere(0.07), Color("eee6d6"), Vector3(0, leg_h + 0.2, 0.55))
 	root.set_meta("base_y", 0.0)
 	return root
+
+
+static func _finish_wall(unit, geometry, params, data):
+	"""A wall piece WALL_SEGMENT long along its local X axis (palisade, stone or gate)."""
+	var key = params.building
+	var length = GameData.WALL_SEGMENT
+	var stone = params.get("stone", key == "stone_wall")
+	match key:
+		"wall":
+			for i in range(5):
+				var x = -length / 2.0 + 0.24 + i * (length - 0.48) / 4.0
+				_part(geometry, _cylinder(0.17, 0.2, 1.9), WOOD, Vector3(x, 0.95, 0))
+				_part(geometry, _cone(0.18, 0.4), WOOD.lightened(0.1), Vector3(x, 2.1, 0))
+			_part(geometry, _box(Vector3(length, 0.12, 0.08)), WOOD.darkened(0.3), Vector3(0, 1.3, 0.2))
+		"stone_wall":
+			_part(geometry, _box(Vector3(length, 2.2, 0.9)), STONE, Vector3(0, 1.1, 0))
+			for i in range(3):
+				_part(geometry, _box(Vector3(0.45, 0.4, 0.95)), STONE.darkened(0.08), Vector3(-0.8 + i * 0.8, 2.4, 0))
+		"gate":
+			var post = STONE if stone else WOOD
+			for x in [-length / 2.0 + 0.2, length / 2.0 - 0.2]:
+				_part(geometry, _box(Vector3(0.4, 2.8, 0.6)), post, Vector3(x, 1.4, 0))
+			_part(geometry, _box(Vector3(length, 0.35, 0.6)), post.darkened(0.15), Vector3(0, 2.75, 0))
+			# two door leaves that swing open (Building animates "DoorL"/"DoorR")
+			for side in [-1, 1]:
+				var hinge = Node3D.new()
+				hinge.name = "DoorL" if side < 0 else "DoorR"
+				hinge.position = Vector3(side * (length / 2.0 - 0.4), 0, 0)
+				geometry.add_child(hinge)
+				_part(hinge, _box(Vector3(length / 2.0 - 0.4, 2.2, 0.15)), WOOD.darkened(0.15), Vector3(-side * (length / 4.0 - 0.2), 1.1, 0))
+				_part(hinge, _box(Vector3(0.5, 0.25, 0.17)), null, Vector3(-side * (length / 4.0 - 0.2), 1.6, 0), true)
+	_collision_box(unit, Vector3(length, 2.4, 0.9))
+	var obstacle = ObstacleScene.instantiate()
+	obstacle.name = "MovementObstacle"
+	obstacle.radius = 0.6
+	obstacle.affect_navigation_mesh = true
+	obstacle.path_height_offset = 0.0
+	# navmesh baking ignores node rotation, so the footprint is rotated here
+	var yaw = float(params.get("yaw", 0.0))
+	var verts = PackedVector3Array()
+	for c in [Vector3(-1, 0, -1), Vector3(1, 0, -1), Vector3(1, 0, 1), Vector3(-1, 0, 1)]:
+		verts.append(Basis(Vector3.UP, yaw) * Vector3(c.x * length / 2.0, 0, c.z * 0.45))
+	obstacle.vertices = verts
+	unit.add_child(obstacle)
+	_common_traits(unit, 1.3, 3.0)
+	return unit
+
+
+static func _collision_box(unit, size: Vector3):
+	var shape = CollisionShape3D.new()
+	shape.name = "CollisionShape3D"
+	var box = BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	shape.position.y = size.y / 2.0
+	unit.add_child(shape)
 
 
 static func _troll(geometry, faction):

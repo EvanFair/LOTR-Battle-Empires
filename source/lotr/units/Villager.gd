@@ -9,6 +9,7 @@ const ARRIVE_SLACK = 1.4
 const REPATH = 1.0
 
 var house = null
+var job = ""  # resource this villager gathers, chosen by LotrPlayer.rebalance_villagers()
 var state = State.IDLE
 var carrying_type = ""
 var carrying_amount = 0
@@ -30,7 +31,11 @@ func is_alive():
 
 
 func assignment():
-	return house.assignment if house != null and is_instance_valid(house) else "home"
+	if house == null or not is_instance_valid(house):
+		return "home"
+	if player.shelter:
+		return "home"
+	return job if job != "" else "food"
 
 
 func _brain(delta):

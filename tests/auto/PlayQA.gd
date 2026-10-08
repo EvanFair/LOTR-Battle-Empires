@@ -152,10 +152,10 @@ func _run():
 	await _frames(3)
 	check("clicking house opens villager bubbles", m.hud._bubbles.visible)
 	await shot("bubbles")
-	var before_assign = house.assignment
+	var before_assign = me.focus
 	press_button_with_text(m.hud._bubbles, "Wood")
 	await _frames(3)
-	check("bubble assigns villagers", house.assignment == "wood", "(%s -> %s)" % [before_assign, house.assignment])
+	check("bubble sets the villager focus", me.focus == "wood", "(%s -> %s)" % [before_assign, me.focus])
 	press_button_with_text(m.hud._bubbles, "Close")
 
 	# B opens base panel; build a village house through the real UI

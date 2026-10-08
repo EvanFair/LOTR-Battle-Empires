@@ -25,6 +25,11 @@ static func deal_damage(attacker, target, base_damage: float, ignore_counters = 
 	var mult = 1.0
 	if not ignore_counters and attacker != null and is_instance_valid(attacker):
 		mult = GameData.counter(attacker.unit_class, target.target_kind)
+	# an army without its hero loses heart
+	if attacker != null and is_instance_valid(attacker) and attacker.unit_kind == "troop" and attacker.player != null:
+		var h = attacker.player.get("hero")
+		if h != null and is_instance_valid(h) and h.dead:
+			mult *= GameData.ARMY_LOST_HEART
 	var damage = base_damage * mult * (1.0 - clampf(target.armor, 0.0, 0.9))
 	if attacker != null and is_instance_valid(attacker):
 		target.last_attacker = attacker

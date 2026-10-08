@@ -92,23 +92,11 @@ func _think():
 
 # --- economy ------------------------------------------------------------------------------------
 func _assign_villagers():
-	var houses = player.buildings("village_house").filter(func(h): return h.is_constructed())
-	var plan = []
-	for i in range(houses.size()):
-		plan.append(ASSIGNMENT_PLAN[i % ASSIGNMENT_PLAN.size()])
-	# whatever the next build step is short of gets at least one house, taken from a resource
-	# that has several (otherwise e.g. 4 houses on food/wood/iron wait forever for stone)
-	for res in _next_step_shortfall():
-		if res in plan or res == "gold":
-			continue
-		for i in range(plan.size() - 1, -1, -1):
-			if plan.count(plan[i]) > 1:
-				plan[i] = res
-				break
-	for i in range(houses.size()):
-		var wanted = plan[i]
-		if houses[i].assignment != wanted:
-			_cmd({"type": "assign_villagers", "house": houses[i].net_id, "assignment": wanted})
+	# villagers are automatic; bots just point the focus at whatever the next step lacks
+	var short = _next_step_shortfall().filter(func(r): return r in GameData.GATHERABLE)
+	var want = short[0] if not short.is_empty() else "balanced"
+	if player.focus != want:
+		_cmd({"type": "assign_villagers", "assignment": want})
 
 
 func _next_step_shortfall() -> Array:
@@ -142,13 +130,34 @@ func _configure_military():
 
 
 func _enemy_lanes() -> Array:
+	"""March targets for auto-repeat squads: every living enemy base."""
 	var result = []
-	for lane in _match.lanes_for_player(player):
-		var other_slot = lane.b if lane.a == player.slot_index else lane.a
-		var other = _match.player_for_slot(other_slot)
+	for t in _match.lanes_for_player(player):
+		if t.kind != "base":
+			continue
+		var other = _match.player_for_slot(t.slot)
 		if other != null and not other.defeated and Teams.is_enemy(other, player):
-			result.append(lane.index)
+			result.append(t.index)
 	return result
+
+
+func _claim_tower(hero) -> bool:
+	"""Walk to the nearest unclaimed forgotten tower and stand on it until it is ours."""
+	var best = -1
+	var best_d = 55.0
+	for i in range(_match.tower_state.size()):
+		if _match.tower_holder(i) != null:
+			continue
+		var d = hero.global_position.distance_to(_match.tower_state[i].site.pos)
+		if d < best_d:
+			best_d = d
+			best = i
+	if best < 0:
+		return false
+	var pos = _match.tower_state[best].site.pos
+	if hero.global_position.distance_to(pos) > 3.0:
+		_cmd({"type": "hero_move", "pos": pos + Vector3(1.5, 0, 0)})
+	return true
 
 
 # --- building -----------------------------------------------------------------------------------
@@ -265,7 +274,7 @@ func _push(hero, tc):
 		return
 	if my_squads.is_empty():
 		# no army in the field: farm the nearest jungle camp while healthy, else wait at home
-		if hero.hp > hero.hp_max * 0.65 and _hunt(hero):
+		if hero.hp > hero.hp_max * 0.65 and (_claim_tower(hero) or _hunt(hero)):
 			return
 		if hero.global_position.distance_to(tc.global_position) > 12.0:
 			_stand_at(hero, tc)

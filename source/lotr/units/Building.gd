@@ -28,6 +28,11 @@ var villagers = []
 var respawn_left = 0.0
 var initial_villagers_spawned = false
 
+# gate: open for our units, shut when enemies are near (replicated for the door animation)
+var gate_open = false
+var _gate_check_left = 0.0
+const GATE_SENSE_RANGE = 7.0
+
 # blacksmith: research in progress
 var research_key = ""
 var research_left = 0.0
@@ -161,7 +166,15 @@ func cancel_construction():
 	queue_free()
 
 
-func _process(_delta):
+func _process(delta):
+	if building_key == "gate":
+		var geometry = find_child("Geometry")
+		if geometry != null:
+			for door in ["DoorL", "DoorR"]:
+				var hinge = geometry.get_node_or_null(door)
+				if hinge != null:
+					var want = (1.4 if door == "DoorL" else -1.4) if gate_open else 0.0
+					hinge.rotation.y = lerp_angle(hinge.rotation.y, want, clampf(delta * 4.0, 0.0, 1.0))
 	if _label3d == null:
 		return
 	if not is_constructed() and _model_base_scale_y > 0.0:
@@ -177,7 +190,7 @@ func _process(_delta):
 			text += "  ENEMY HERO!"
 	elif building_key == "village_house" and is_in_group("controlled_units"):
 		var alive = alive_villagers().size() if not puppet else get_meta("villagers_alive", 0)
-		text = "%s %d/%d" % [assignment.capitalize() if assignment != "home" else "Home", alive, GameData.VILLAGERS_PER_HOUSE]
+		text = "%s %d/%d" % ["Sheltering" if player.shelter else "Villagers", alive, GameData.VILLAGERS_PER_HOUSE]
 	elif trains != "" and is_in_group("controlled_units") and (auto_repeat or manual_pending > 0):
 		text = "Need resources" if not supply_full() else "Next %ds" % ceili(cycle_left)
 	elif building_key == "town_center" and age_target > 0:
@@ -205,6 +218,8 @@ func _physics_process(delta):
 		_age_tick(delta)
 	if research_key != "":
 		_research_tick(delta)
+	if building_key == "gate":
+		_gate_tick(delta)
 
 
 # --- production -------------------------------------------------------------------------------
@@ -337,6 +352,38 @@ func _spawn_villager(index: int):
 
 func set_assignment(value: String):
 	assignment = value
+
+
+# --- gate ------------------------------------------------------------------------------------------
+func _gate_tick(delta):
+	_gate_check_left -= delta
+	if _gate_check_left > 0.0:
+		return
+	_gate_check_left = 0.4
+	var enemy_near = false
+	for u in SpatialGrid.near(get_tree(), global_position, GATE_SENSE_RANGE + 1.0):
+		if is_instance_valid(u) and u.is_alive() and is_enemy_of(u) and not Combat.is_wild(u) and u.unit_kind != "building":
+			if u.global_position_yless.distance_to(global_position_yless) <= GATE_SENSE_RANGE:
+				enemy_near = true
+				break
+	set_gate_open(not enemy_near)
+
+
+func set_gate_open(value: bool):
+	if value == gate_open:
+		return
+	gate_open = value
+	# an open gate stops cutting the navmesh, so everyone could path through it; it only opens
+	# while no enemy is near, which is what keeps enemies out (as in Age of Empires)
+	var obstacle = find_child("MovementObstacle")
+	if obstacle == null or not obstacle.is_inside_tree():
+		return
+	var group = Constants.Match.Navigation.DOMAIN_TO_GROUP_MAPPING[obstacle.domain]
+	if value:
+		obstacle.remove_from_group(group)
+	else:
+		obstacle.add_to_group(group)
+	MatchSignals.schedule_navigation_rebake.emit(obstacle.domain)
 
 
 # --- blacksmith: research -------------------------------------------------------------------------

@@ -37,6 +37,8 @@ var defeated = false
 var storehouse_ready_at = 0.0  # time (s) when a lost Storehouse may be rebuilt
 var hero = null
 var upgrades = {}  # finished Blacksmith research: key -> true
+var focus = "balanced"  # villagers split themselves between resources, leaning towards this
+var shelter = false  # all villagers hide in their houses
 var income = {}  # resource -> gathered in the current minute window
 var income_per_min = {}
 var _income_window_start = 0.0
@@ -148,3 +150,67 @@ func request_haul_job(villager) -> Dictionary:
 	subtract_resources({best.resource: best.amount})  # taken from the stockpile at pickup
 	best.building.reserve_incoming(best.resource, best.amount)
 	return best
+
+
+# --- automatic villagers -----------------------------------------------------------------------
+const BASE_SHARES = {"food": 0.35, "wood": 0.30, "stone": 0.15, "iron": 0.20}
+const FOCUS_BONUS = 0.45
+
+
+func villager_shares() -> Dictionary:
+	"""Fraction of villagers on each resource, from the focus and what is left on the map."""
+	var shares = BASE_SHARES.duplicate()
+	if shares.has(focus):
+		shares[focus] += FOCUS_BONUS
+	var available = {}
+	for r in get_tree().get_nodes_in_group("lotr_resources"):
+		if not r.is_depleted():
+			available[r.resource_type] = true
+	for res in shares.keys():
+		if not available.has(res):
+			shares.erase(res)  # nothing left of it on the map
+	if shares.is_empty():
+		return {"food": 1.0}
+	var total = 0.0
+	for res in shares:
+		total += shares[res]
+	for res in shares:
+		shares[res] /= total
+	return shares
+
+
+func rebalance_villagers():
+	"""Host: give every villager a job so the split matches villager_shares(), moving as few
+	villagers as possible."""
+	var workers = []
+	for h in buildings("village_house"):
+		workers.append_array(h.alive_villagers())
+	if workers.is_empty():
+		return
+	workers.sort_custom(func(a, b): return a.net_id < b.net_id)
+	var shares = villager_shares()
+	var target = {}
+	var assigned = 0
+	var order = shares.keys()
+	order.sort_custom(func(a, b): return shares[a] > shares[b])
+	for res in order:
+		target[res] = int(floor(shares[res] * workers.size()))
+		assigned += target[res]
+	var i = 0
+	while assigned < workers.size():
+		target[order[i % order.size()]] += 1
+		assigned += 1
+		i += 1
+	var counts = {}
+	var loose = []
+	for v in workers:
+		if v.job != "" and counts.get(v.job, 0) < target.get(v.job, 0):
+			counts[v.job] = counts.get(v.job, 0) + 1
+		else:
+			loose.append(v)
+	for v in loose:
+		for res in order:
+			if counts.get(res, 0) < target[res]:
+				v.job = res
+				counts[res] = counts.get(res, 0) + 1
+				break

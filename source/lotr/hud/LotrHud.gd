@@ -8,7 +8,8 @@ const PANEL_BG = Color(0.08, 0.07, 0.06, 0.82)
 const ACCENT = Color("e8c24a")
 const RES_ICONS = {"food": "Food", "wood": "Wood", "stone": "Stone", "iron": "Iron", "gold": "Gold"}
 const ASSIGN_LABELS = {
-	"food": "Food", "wood": "Wood", "stone": "Stone", "iron": "Iron", "home": "Return home",
+	"balanced": "Balanced", "food": "Food", "wood": "Wood", "stone": "Stone", "iron": "Iron",
+	"home": "Shelter",
 }
 const TOAST_TIME = 4.0
 const SQUAD_ORDER_BUTTONS = [
@@ -36,6 +37,7 @@ var _military_tab = null
 var _age_tab = null
 var _upgrades_tab = null
 var _learn_buttons = {}
+var _focus_pick = null
 var _base_tabs = null
 var _squad_lane = null
 var _drag_box = null
@@ -78,6 +80,7 @@ func _ready():
 
 func _process(_delta):
 	_refresh_top_bar()
+	_refresh_tower_labels()
 	if _match.local_player == null:
 		return
 	_refresh_hero()
@@ -164,7 +167,20 @@ func _in_base():
 # --- top bar ----------------------------------------------------------------------------------
 func _build_top_bar():
 	var panel = _panel(_root, Control.PRESET_CENTER_TOP)
-	_top_label = _label(panel, "", 16)
+	var row = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	panel.add_child(row)
+	_top_label = _label(row, "", 16)
+	_focus_pick = OptionButton.new()
+	_focus_pick.focus_mode = Control.FOCUS_NONE
+	_focus_pick.tooltip_text = "Villagers work on their own; this is what they focus on"
+	var i = 0
+	for key in ["balanced", "food", "wood", "stone", "iron"]:
+		_focus_pick.add_item("Villagers: " + ASSIGN_LABELS[key], i)
+		_focus_pick.set_item_metadata(i, key)
+		i += 1
+	_focus_pick.item_selected.connect(func(idx): _submit({"type": "assign_villagers", "assignment": _focus_pick.get_item_metadata(idx)}))
+	row.add_child(_focus_pick)
 
 
 func _refresh_top_bar():
@@ -181,6 +197,11 @@ func _refresh_top_bar():
 		if income > 0:
 			text += " (+%d/min)" % income
 		parts.append(text)
+	if _focus_pick != null:
+		_focus_pick.visible = true
+		for idx in range(_focus_pick.item_count):
+			if _focus_pick.get_item_metadata(idx) == p.focus and _focus_pick.selected != idx:
+				_focus_pick.select(idx)
 	var houses = p.buildings("village_house").size()
 	parts.append("Houses %d/%d" % [houses, GameData.MAX_HOUSES])
 	parts.append("Age: %s" % GameData.AGE_NAMES[p.age])
@@ -377,7 +398,7 @@ func _refresh_squads():
 			panel.offset_bottom = bottom
 			panel.offset_top = bottom
 	if _squad_lane.item_count == 0 and _match.local_player != null:
-		_squad_lane.add_item("Send to lane...", 0)
+		_squad_lane.add_item("March to...", 0)
 		_squad_lane.set_item_metadata(0, -1)
 		var li = 1
 		for lane in _match.lanes_for_player(_match.local_player):
@@ -427,6 +448,8 @@ func _on_mode_changed(mode):
 			_mode_label.text = "Left-click to place (hold Shift to place more, right-click cancels)"
 		"attack_move":
 			_mode_label.text = "Attack-move: left-click where to go (your hero fights anything on the way)"
+		"place_wall":
+			_mode_label.text = "Walls: click where the wall starts, then where it ends (Shift keeps going). Roads get gates automatically."
 		"cast":
 			_mode_label.text = "Left-click to cast (right-click cancels)"
 		_:
@@ -486,6 +509,36 @@ func _scroll_tab(tabs, title):
 			child.custom_minimum_size.x = 300)
 	scroll.add_child(box)
 	return box
+
+
+var _tower_labels = []
+
+
+func _refresh_tower_labels():
+	if _tower_labels.is_empty():
+		for st in _match.tower_state:
+			var l = Label3D.new()
+			l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			l.no_depth_test = true
+			l.font_size = 34
+			l.outline_size = 8
+			l.pixel_size = 0.01
+			l.modulate = Color(0.9, 0.85, 0.65)
+			_match.add_child(l)
+			l.global_position = st.site.pos + Vector3(0, 3.2, 0)
+			_tower_labels.append(l)
+	for i in range(_tower_labels.size()):
+		var st = _match.tower_state[i]
+		var l = _tower_labels[i]
+		if _match.tower_holder(i) != null:
+			l.visible = false
+			continue
+		l.visible = true
+		if st.progress > 0.0 and st.claimer >= 0:
+			var who = _match.player_for_slot(st.claimer)
+			l.text = "%s claiming %d%%" % [who.player_name if who != null else "?", int(st.progress * 100)]
+		else:
+			l.text = "Forgotten tower\nstand here with your hero to claim"
 
 
 func in_base() -> bool:
@@ -600,7 +653,7 @@ func _make_military_row(b):
 	line.add_child(row.auto)
 	row.lane = OptionButton.new()
 	row.lane.focus_mode = Control.FOCUS_NONE
-	row.lane.add_item("Rally (no lane)", 0)
+	row.lane.add_item("Stay by the building", 0)
 	row.lane.set_item_metadata(0, -1)
 	var i = 1
 	for lane in _match.lanes_for_player(_match.local_player):
@@ -766,9 +819,10 @@ func _build_bubbles():
 	var box = VBoxContainer.new()
 	_bubbles.add_child(box)
 	_bubbles.set_meta("title", _label(box, "Villagers", 14, ACCENT))
+	_label(box, "Villagers work on their own. Pick what they should focus on:", 12, Color(1, 1, 1, 0.7))
 	var row = HBoxContainer.new()
 	box.add_child(row)
-	for assignment in ["food", "wood", "stone", "iron", "home"]:
+	for assignment in ["balanced", "food", "wood", "stone", "iron", "home"]:
 		var b = _button(row, ASSIGN_LABELS[assignment], _on_assign.bind(assignment))
 		b.set_meta("assignment", assignment)
 	_bubbles.set_meta("row", row)
@@ -783,9 +837,7 @@ func show_bubbles(house):
 
 
 func _on_assign(assignment):
-	if _bubble_house == null or not is_instance_valid(_bubble_house):
-		return
-	_submit({"type": "assign_villagers", "house": _bubble_house.net_id, "assignment": assignment})
+	_submit({"type": "assign_villagers", "assignment": assignment})
 
 
 func _refresh_bubbles():
@@ -797,12 +849,14 @@ func _refresh_bubbles():
 	var screen = get_viewport().get_camera_3d().unproject_position(_bubble_house.global_position)
 	_bubbles.position = screen + Vector2(-_bubbles.size.x / 2.0, 30)
 	var alive = _bubble_house.alive_villagers().size() if _match.is_host() else _bubble_house.get_meta("villagers_alive", 0)
-	var title = "Villagers %d/%d" % [alive, GameData.VILLAGERS_PER_HOUSE]
+	var title = "Villagers in this house %d/%d" % [alive, GameData.VILLAGERS_PER_HOUSE]
 	if alive < GameData.VILLAGERS_PER_HOUSE:
-		title += "   next villager in %ds (50 Food)" % ceili(max(0.0, _bubble_house.respawn_left))
+		title += "   next villager in %ds" % ceili(max(0.0, _bubble_house.respawn_left))
 	_bubbles.get_meta("title").text = title
+	var p = _match.local_player
 	for b in _bubbles.get_meta("row").get_children():
-		var active = b.get_meta("assignment") == _bubble_house.assignment
+		var key = b.get_meta("assignment")
+		var active = (key == "home" and p.shelter) or (key == p.focus and not p.shelter)
 		b.modulate = ACCENT if active else Color.WHITE
 
 
