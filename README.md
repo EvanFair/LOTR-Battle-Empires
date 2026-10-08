@@ -6,6 +6,7 @@ Team (2v2) and Free-for-All modes. 8 factions planned, 4 at launch: Gondor, Roha
 
 - **Plan:** [docs/PLAN.md](docs/PLAN.md): scope, architecture, weekend build steps, and UX spec
 - **Research:** [docs/RESEARCH.md](docs/RESEARCH.md): reference code bases, free LOTR models, and tools
+- **Run it:** open `project.godot` in **Godot 4.3** and press F5 (main menu), or open `tests/manual/TestPlayerVsAI.tscn` and press F6 to jump straight into a match.
 - **Claude Code skills:** [.claude/skills/](.claude/skills/README.md): Godot RTS, MOBA, navigation, combat and more
 
 Built on [lampe-games/godot-open-rts](https://github.com/lampe-games/godot-open-rts) (MIT).

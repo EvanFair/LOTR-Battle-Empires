@@ -16,3 +16,6 @@ references/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# open-rts runtime scratch (options file when save_user_files_in_tmp is on)
+tmp/
