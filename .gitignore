@@ -1,0 +1,52 @@
+# Secrets — never commit real API keys
+.env
+*.env
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Node / web builds
+node_modules/
+dist/
+npm-debug.log*
+
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+*.csproj
+*.sln
+*.pidb
+*.userprefs
+
+# Godot
+.godot/
+.import/
+export_presets.cfg
+
+# Unreal
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+*.VC.db
+
+# Build outputs
+*.exe
+*.dmg
+*.apk
