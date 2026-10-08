@@ -1,52 +1,18 @@
-# Secrets — never commit real API keys
-.env
-*.env
-
-# OS / editor files
-.DS_Store
-Thumbs.db
-desktop.ini
-.vscode/
-.idea/
-*.swp
-
-# Python
-__pycache__/
-*.py[cod]
-venv/
-.venv/
-
-# Node / web builds
-node_modules/
-dist/
-npm-debug.log*
-
-# Unity
-[Ll]ibrary/
-[Tt]emp/
-[Oo]bj/
-[Bb]uild/
-[Bb]uilds/
-[Ll]ogs/
-[Uu]ser[Ss]ettings/
-*.csproj
-*.sln
-*.pidb
-*.userprefs
-
-# Godot
+# Godot 4
 .godot/
 .import/
 export_presets.cfg
+*.translation
 
-# Unreal
-Binaries/
-DerivedDataCache/
-Intermediate/
-Saved/
-*.VC.db
-
-# Build outputs
+# Builds
+build/
 *.exe
-*.dmg
-*.apk
+*.pck
+
+# Reference repos cloned for study (not part of the game)
+references/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

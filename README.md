@@ -1,22 +1,12 @@
 # LOTR Battle Empires
 
-A new game build by Evan and Jobson.
+A Lord of the Rings **MOBA + RTS hybrid** built in **Godot 4** (3D).
+You control only your Hero, Dota-style. Your economy runs itself, and you command squadrons of troops by leading them in person.
+Four factions, 2v2: Gondor + Rohan vs Mordor + Isengard.
 
-## Getting started
+- **Plan:** [docs/PLAN.md](docs/PLAN.md): scope, architecture, weekend build steps, and UX spec
+- **Research:** [docs/RESEARCH.md](docs/RESEARCH.md): reference code bases, free LOTR models, and tools
+- **Claude Code skills:** [.claude/skills/](.claude/skills/README.md): Godot RTS, MOBA, navigation, combat and more
 
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/EvanFair/LOTR-Battle-Empires.git
-   ```
-2. Read [GIT_WORKFLOW.md](GIT_WORKFLOW.md) — it explains the daily scripts.
-3. Each day, run your `*_start_day.bat` before coding and `*_save_and_upload.bat` when you're done.
-
-## Project layout
-
-| Folder    | What goes in it                                  |
-|-----------|--------------------------------------------------|
-| `game/`   | Game source code (engine project lives here)      |
-| `assets/` | Art, audio, maps, fonts                           |
-| `docs/`   | Design docs, lore notes, roadmap                  |
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the plan.
+Built on [lampe-games/godot-open-rts](https://github.com/lampe-games/godot-open-rts) (MIT).
+Personal fan project, not affiliated with the Tolkien Estate or Warner Bros.
