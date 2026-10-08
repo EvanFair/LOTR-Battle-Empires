@@ -147,7 +147,8 @@ func _try_teleporting_camera_based_on_local_texture_rect_position(position_2d_wi
 	var world_position_3d = Vector3(world_position_2d.x, 0, world_position_2d.y)
 	var hero_controller = _match.get("hero_controller")
 	if hero_controller != null:
-		hero_controller.camera_locked = false  # looking elsewhere: free the camera (Space re-locks)
+		hero_controller.camera_locked = false  # look elsewhere; the next hero move snaps back
+		hero_controller.minimap_peek = true
 	get_viewport().get_camera_3d().set_position_safely(world_position_3d)
 
 

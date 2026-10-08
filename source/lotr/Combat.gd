@@ -74,7 +74,7 @@ static func _reward_kill(attacker, victim):
 static func _reward_creature(attacker, victim):
 	var data = GameData.CREATURES[victim.creature_key]
 	var killer_player = attacker.player
-	killer_player.add_resources({"gold": data.gold})
+	killer_player.add_resources({"gold": data.gold, "food": data.get("food", 0)})
 	# MOBA jungle: the last hitter heals a little; nearby allied heroes share the XP
 	if attacker.unit_kind == "hero":
 		attacker.hp = min(attacker.hp_max, attacker.hp + int(attacker.hp_max * 0.1))
@@ -84,6 +84,66 @@ static func _reward_creature(attacker, victim):
 	var match_node = victim.get_tree().get_first_node_in_group("lotr_match")
 	if match_node != null:
 		match_node.on_creature_slain(victim, killer_player)
+
+
+# --- target priority (troops, towers, Follow-mode squads) ----------------------------------------
+# League of Legends minion/tower rules, adapted. Lower tier wins; ties go to the closest.
+#   0  an enemy HERO attacking one of our heroes
+#   1  any other enemy attacking one of our heroes
+#   2  an enemy unit attacking one of our troops, villagers or buildings
+#   3  the closest enemy troop, creature in a fight, or villager
+#   4  an enemy building
+#   5  an enemy hero that is not attacking anyone of ours (heroes are hit last)
+const TIER_NAMES = ["hero attacking our hero", "unit attacking our hero", "unit attacking our units",
+	"closest unit", "building", "idle hero"]
+
+
+static func current_target(unit):
+	"""What a unit is hitting right now (its attack order, or its last swing in the last 2s)."""
+	var t = unit.get("order_target")
+	if t != null and is_instance_valid(t) and t.is_alive() and unit.get("order") == unit.Order.ATTACK:
+		return t
+	var last = unit.get("last_hit_target")
+	if last != null and is_instance_valid(last) and last.is_alive() and GameData.now() - unit.last_attack_at < 2.0:
+		return last
+	return null
+
+
+static func target_tier(unit, enemy) -> int:
+	var victim = current_target(enemy)
+	var hits_ours = victim != null and Teams.is_ally(victim.player, unit.player)
+	if hits_ours and victim.unit_kind == "hero":
+		return 0 if enemy.unit_kind == "hero" else 1
+	if hits_ours and enemy.unit_kind != "hero":
+		return 2
+	match enemy.unit_kind:
+		"troop", "creature", "villager":
+			return 3
+		"building":
+			return 4
+	return 5
+
+
+static func pick_target(unit, from: Vector3, radius: float, include_wild = false):
+	var best = null
+	var best_tier = 99
+	var best_d2 = INF
+	for other in SpatialGrid.near(unit.get_tree(), from, radius + 3.0):
+		if other == unit or not is_instance_valid(other) or not other.is_alive() or not unit.is_enemy_of(other):
+			continue
+		if not include_wild and is_wild(other) and other.get("order_target") == null:
+			continue
+		var d = other.global_position - from
+		d.y = 0.0
+		var d2 = d.length_squared()
+		if d2 > radius * radius:
+			continue
+		var tier = target_tier(unit, other)
+		if tier < best_tier or (tier == best_tier and d2 < best_d2):
+			best_tier = tier
+			best_d2 = d2
+			best = other
+	return best
 
 
 static func is_wild(unit) -> bool:

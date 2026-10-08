@@ -34,11 +34,24 @@ func _think():
 		State.HOME:
 			var attacker = _valid_attacker()
 			if attacker != null:
-				_camp_aggro(attacker)
+				if GameData.CREATURES[creature_key].get("passive", false):
+					_flee(attacker)
+				else:
+					_camp_aggro(attacker)
 		State.FIGHT:
 			if global_position_yless.distance_to(anchor * Vector3(1, 0, 1)) > GameData.LEASH_RANGE:
 				_go_home()
 				return
+			# focus whoever pulled the camp; if they run out of the camp area, switch to another
+			# attacker still in it (heroes before troops) instead of chasing out
+			if order == Order.ATTACK and order_target != null and is_instance_valid(order_target):
+				if order_target.global_position_yless.distance_to(anchor * Vector3(1, 0, 1)) > GameData.LEASH_RANGE:
+					var other = _attacker_in_camp()
+					if other != null:
+						order_attack(other)
+					else:
+						_go_home()
+					return
 			if order != Order.ATTACK:
 				# target gone: fight whoever hit us last, else go home
 				var attacker = _valid_attacker()
@@ -66,12 +79,32 @@ func _valid_attacker():
 	return a
 
 
+func _attacker_in_camp():
+	var best = null
+	for e in Combat.enemies_in_radius(self, anchor, GameData.LEASH_RANGE, get_tree()):
+		if Combat.current_target(e) == null or not Combat.current_target(e) in (camp.members if camp != null else [self]):
+			continue
+		if best == null or (e.unit_kind == "hero" and best.unit_kind != "hero"):
+			best = e
+	return best
+
+
 func _camp_aggro(attacker):
 	var members = camp.members if camp != null else [self]
 	for m in members:
 		if is_instance_valid(m) and m.is_alive() and m.state != State.RETURN:
 			m.state = State.FIGHT
 			m.order_attack(attacker)
+
+
+func _flee(attacker):
+	# game animals bolt away from whoever hurt them, then wander back
+	var away = global_position - attacker.global_position
+	away.y = 0.0
+	away = away.normalized() if away.length() > 0.1 else Vector3.RIGHT
+	last_attacker = null
+	state = State.RETURN
+	order_move(anchor + away * 6.0)
 
 
 func _go_home():

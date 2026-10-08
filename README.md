@@ -37,9 +37,13 @@ The full reasoning, and how other open-source MOBAs do it, is in [docs/CONTROLS.
 | **S** / **H** | Stop / hold position |
 | **Q W E R** | Abilities. **Hold** to see the range and aim, **release** to cast. Right-click while holding cancels. A unit-target ability walks into range first. |
 | **Ctrl + Q/W/E/R** | Learn or level up an ability (one skill point per hero level; ultimate R at levels 6/8/10) |
-| **B** | In your base: base panel (Build, Military, Age, Blacksmith). Outside: **Recall** home (6s; moving, casting or taking damage cancels it) |
-| **Tab** | Cycle through squadrons within 15m of your hero (a gold ring shows the 15m range) |
-| **1 / 2 / 3 / 4** | Selected squadron: **Attack** (then click an enemy) / **Defend** (then click a spot) / **Hold** / **Return home** (to heal) |
+| **B** | In your base: base panel (Build, Military, Age, Blacksmith, Shop). Outside: **Recall** home (6s; moving, casting or taking damage cancels it) |
+| **V** | Build menu anywhere on the map (buildings can go anywhere) |
+| Left-drag a box / click a soldier | Select squadrons, from anywhere. One soldier in the box selects the whole squadron. **Shift** adds; **Esc** or clicking the ground clears |
+| Right-click (with squadrons selected) | Selected squadrons attack that enemy / move there (your hero stays put) |
+| **G** | **Follow me**: selected squadrons (or all of them) follow your hero and attack whatever your hero attacks |
+| **Tab** / **Ctrl+A** | Cycle through / select all your squadrons |
+| **1 / 2 / 3 / 4** | Selected squadrons: **Attack** (then click an enemy) / **Move** (then click a spot) / **Hold** / **Return home** (to heal). The squad panel also sends them back to a lane |
 | **Alt + left-click** | Ping for your team (**Alt+Shift**: danger ping) |
 | Left-click your house or villager | Villager bubbles: Food / Wood / Stone / Iron / Return home |
 | Left-click your building | Info (and cancel construction for a 75% refund) |
@@ -51,18 +55,20 @@ The full reasoning, and how other open-source MOBAs do it, is in [docs/CONTROLS.
 
 ### How a match works
 
-- **Economy:** each Village House holds 3 villagers. Assign each house to Food, Wood, Stone or Iron; more houses on a resource means it comes in faster. Herds of game regrow; forests, quarries and mines run out. A killed villager is replaced after 45s for 50 Food. **Gold** comes from kills and from clearing jungle camps.
-- **Building:** only heroes build. Place a building from the base panel, then **stand next to it** while the timer runs. If you leave, it pauses. An enemy hero nearby also pauses it. Two heroes build 1.5× faster. Watchtowers can go anywhere; everything else goes inside your base.
+- **Economy:** up to 6 Village Houses of 3 villagers. Assign each house to Food, Wood, Stone or Iron. Resources run out, so expand to new spots. Hunt deer and clear jungle camps for extra Food and Gold. A killed villager comes back free after 30s.
+- **Building:** only heroes build, and buildings can go **anywhere** (press **V** out in the field). Stand next to the foundation while the timer runs; an enemy hero nearby pauses it. Two heroes build 1.5× faster. Up to 10 watchtowers.
 - **Ages:** advance at the Town Center (your hero must stay there).
   - **Kingdom Age** unlocks the Archery Range, Stables, Storehouse and Blacksmith.
   - **Empire Age** unlocks the Siege Works, your faction's special building (Ranger Hideout, Meduseld, Black Gate Forge, Orthanc Furnace) and the top Blacksmith research.
 - **Armies:**
-  - Barracks (infantry), Archery Range (archers), Stables (riders), Siege Works (heavy) and the special building train squadrons.
-  - Villagers must **carry supplies** to the building first. Turn on **Auto-repeat** and pick a lane, and you get a squadron every 60s that marches that lane.
+  - Barracks (infantry), Archery Range (archers), Stables (riders), Siege Works (heavy) and the special building train squadrons, paid straight from your stockpile.
+  - Turn on **Auto-repeat** and pick a lane, and you get a squadron every 60s that marches that lane (Top, Mid, Bottom, Left or Right).
+  - Command them from anywhere: box-select and right-click, or press **G** to have them follow your hero.
+  - **Target priority** (like League of Legends minions and towers): troops and towers first hit an enemy hero attacking your hero, then anything attacking your hero, then anything attacking your units, then the nearest unit, then buildings, and enemy heroes last. They stay on a target instead of flickering between targets. Jungle camps fight whoever pulled them and give up past their leash.
   - Every faction's heavy and special troops are different:
     - Gondor: Trebuchets and Rangers.
     - Rohan: the Royal Guard and Horse Archers.
-    - Mordor: Mountain Trolls and Grond.
+    - Mordor: Grond (Siege Works) and Mountain Trolls (Black Gate Forge).
     - Isengard: Battering Rams and Berserker Sappers, who blow up.
   - Siege engines go for buildings first.
 - **Blacksmith:** research Forged Blades, Plated Armour, War Drills (+2 soldiers per squadron) and Master Smiths. Upgrades apply to squadrons trained afterwards.
@@ -74,6 +80,7 @@ The full reasoning, and how other open-source MOBAs do it, is in [docs/CONTROLS.
   - Mordor: Gothmog, the Witch-king, Shelob.
   - Isengard: Uglúk, Saruman, Lurtz.
   - You get a skill point per level. Spend it with **Ctrl+Q/W/E/R**; each ability has 3 ranks. Abilities stun, root, slow and weaken.
+  - Mana is limited, so choose when to cast; an ability you can't afford won't start aiming. Stand next to your Town Center to heal and refill mana quickly. Heroes walk through units.
 - **The Wild:**
   - Spider and warg camps sit between the lanes. They ignore you until struck, then the whole camp fights back. Pull them too far and they go home and heal.
   - Clearing a camp pays Gold and XP.

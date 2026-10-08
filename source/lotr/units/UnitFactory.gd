@@ -120,6 +120,12 @@ static func _create_creature(params):
 	unit.armor = data.get("armor", 0.0)
 	var geometry = _geometry(unit)
 	match params.creature:
+		"deer":
+			var deer = _deer(geometry)
+			var danim = CreatureAnimScript.new()
+			danim.name = "CreatureAnim"
+			danim.body = deer
+			unit.add_child(danim)
 		"spider":
 			_spider(unit, geometry, Color(0.2, 0.17, 0.15), 1.0)
 		"warg":
@@ -189,6 +195,12 @@ static func _create_hero(params):
 	# a gold ring at the feet so heroes stand out in a crowd
 	_part(geometry, _torus(0.62, 0.72), Color("e8c24a"), Vector3(0, 0.04, 0))
 	_finish_mobile(unit, stats, 2.6)
+	# heroes walk straight through units (not buildings: those are cut out of the navmesh).
+	# Avoidance stays on (Movement relies on its velocity signal); the hero just sits on its own
+	# avoidance layer and avoids nothing, so units and the hero ignore each other.
+	var hero_move = unit.get_node("Movement")
+	hero_move.avoidance_layers = 2
+	hero_move.avoidance_mask = 0
 	unit.add_to_group("heroes")
 	return unit
 
@@ -469,6 +481,25 @@ static func _mount(geometry, faction):
 	# saddle cloth in team colour
 	if not shadow:
 		_part(root, _box(Vector3(0.6, 0.06, 0.5)), null, Vector3(0, leg_h + 0.38, 0.05), true)
+	return root
+
+
+static func _deer(geometry):
+	"""A red deer: slim body, long legs, white tail, antlers."""
+	var coat = Color("9a6a3e")
+	var root = Node3D.new()
+	geometry.add_child(root)
+	var leg_h = 0.62
+	_part(root, _capsule(0.2, 1.0), coat, Vector3(0, leg_h + 0.12, 0), false, Vector3(PI / 2, 0, 0))
+	_part(root, _capsule(0.08, 0.55), coat, Vector3(0, leg_h + 0.42, -0.42), false, Vector3(-0.6, 0, 0))
+	_part(root, _box(Vector3(0.14, 0.16, 0.34)), coat.darkened(0.1), Vector3(0, leg_h + 0.66, -0.6), false, Vector3(0.3, 0, 0))
+	for x in [-0.08, 0.08]:
+		_part(root, _cylinder(0.015, 0.02, 0.35), Color("d8cdb5"), Vector3(x * 1.4, leg_h + 0.9, -0.55), false, Vector3(0, 0, x * 5.0))
+	for x in [-0.11, 0.11]:
+		for z in [-0.3, 0.32]:
+			_part(root, _cylinder(0.035, 0.025, leg_h), coat.darkened(0.25), Vector3(x, leg_h / 2.0, z))
+	_part(root, _sphere(0.07), Color("eee6d6"), Vector3(0, leg_h + 0.2, 0.55))
+	root.set_meta("base_y", 0.0)
 	return root
 
 

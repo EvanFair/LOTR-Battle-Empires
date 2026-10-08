@@ -24,9 +24,12 @@ RMB and QWER stay, because every MOBA uses them. What changes is that the RTS la
 | **5 6 7 8** | Item slots |
 | **B** | In base: base panel (Build / Military / Age / Blacksmith / Shop). Outside: **Recall** (6s, cancelled by moving, casting or taking damage) |
 | **P** | Shop (only at base) |
-| **Tab** | Cycle squadrons within 15m of your hero |
-| **1 2 3 4** | Selected squadron: Attack / Defend / Hold / Return home |
-| **G** | Selected squadron: follow your hero |
+| **V** | Build menu anywhere (buildings can go anywhere since the 8 Oct playtest) |
+| Left-drag / click a soldier | Select squadrons anywhere; one soldier in the box selects its whole squadron; Shift adds |
+| Right-click with squadrons selected | They attack / move there; the hero stays |
+| **G** | Follow me: selected (or all) squadrons follow the hero and attack what it attacks |
+| **Tab** / **Ctrl+A** | Cycle / select all squadrons (no 15m limit any more) |
+| **1 2 3 4** | Selected squadrons: Attack / Move / Hold / Return home |
 | **Alt + left-click** (map or minimap) | Ping |
 | **Y** / **Space** | Camera lock on/off / snap to hero |
 | Arrows, thin screen-edge band, middle-drag | Pan |
@@ -41,7 +44,7 @@ RMB and QWER stay, because every MOBA uses them. What changes is that the RTS la
 - **Cursor:** shape changes over enemies.
 - **A pressed:** the hero's attack-range circle.
 - **Skill held** (or in indicator mode): the cast-range circle, plus the skill's shape (line for a skillshot, circle at the cursor for ground AoE, highlight for a unit target).
-- **Tab / 1–4 / G:** a faint 15m command ring around the hero. A squad that is out of range flashes red with "Move closer".
+- **Selection:** a ring under every soldier of the selected squadrons, and a green drag box while selecting.
 - **Defend:** a gold flag where the squad will defend.
 - **Recall:** a channel ring with a progress arc.
 - **Ping:** an expanding ring in the world and a blip on the minimap.

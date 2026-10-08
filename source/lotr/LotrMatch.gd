@@ -450,7 +450,8 @@ func lane_label(lane_index: int, p) -> String:
 	var relation = ""
 	if other_player != null:
 		relation = " (ally)" if Teams.is_ally(other_player, p) else " (enemy)"
-	return "%s lane → %s%s" % [lane.name, who, relation]
+	var lane_name = "Mid" if lane.name.ends_with("Mid") else lane.name
+	return "%s lane → %s%s" % [lane_name, who, relation]
 
 
 # --- commands (host) --------------------------------------------------------------------------
@@ -599,26 +600,37 @@ func _cmd_cast(cmd):
 
 
 func _cmd_squad_order(cmd):
-	var hero = _alive_hero(cmd)
-	if hero == null:
-		return "Your hero is dead"
-	var squad = squad_by_id(cmd.squad)
-	if squad == null or squad.player != hero.player:
-		return "That squadron is gone"
-	if squad.center().distance_to(hero.global_position) > GameData.COMMAND_RANGE + 2.0:
-		return "Move closer to the squadron to command it"
-	match cmd.order:
-		"attack":
-			var target = by_net_id(cmd.get("target", 0))
-			if target == null or not hero.is_enemy_of(target):
-				return "Pick an enemy to attack"
-			squad.order_attack(target)
-		"defend":
-			squad.order_defend(cmd.pos)
-		"hold":
-			squad.order_hold()
-		"return":
-			squad.order_return()
+	"""Orders one or more squadrons, from anywhere on the map (the old 15m rule is gone)."""
+	var p = player_for_slot(cmd.player)
+	if p == null or p.defeated:
+		return ""
+	var ids = cmd.get("squads", [cmd.get("squad", 0)])
+	var squads = []
+	for id in ids:
+		var squad = squad_by_id(id)
+		if squad != null and squad.player == p:
+			squads.append(squad)
+	if squads.is_empty():
+		return "Those squadrons are gone"
+	for squad in squads:
+		match cmd.order:
+			"attack":
+				var target = by_net_id(cmd.get("target", 0))
+				if target == null or not Teams.is_enemy(p, target.player):
+					return "Pick an enemy to attack"
+				squad.order_attack(target)
+			"defend", "move":
+				squad.order_defend(cmd.pos)
+			"hold":
+				squad.order_hold()
+			"return":
+				squad.order_return()
+			"follow":
+				squad.order_follow()
+			"lane":
+				var lane_index = int(cmd.get("lane", -1))
+				if lane_index >= 0 and lane_index < lanes.size():
+					squad.order_lane(MapGen.lane_points_from(lanes[lane_index], p.slot_index))
 	return ""
 
 
@@ -648,11 +660,8 @@ func _cmd_build(cmd):
 	if data.age > p.age:
 		return "Requires the %s Age" % GameData.AGE_NAMES[data.age]
 	var pos: Vector3 = cmd.pos
-	if data.get("base_only", true) and not p.in_base(pos):
+	if data.get("base_only", false) and not p.in_base(pos):
 		return "%s must be built inside your base" % data.name
-	if not data.get("base_only", true) and not p.in_base(pos):
-		if pos.distance_to(hero.global_position) > GameData.COMMAND_RANGE * 2:
-			return "Too far from your hero"
 	if key == "village_house" and p.buildings("village_house").size() >= GameData.MAX_HOUSES:
 		return "You already have %d Village Houses" % GameData.MAX_HOUSES
 	if data.has("max") and p.buildings(key).size() >= data.max:

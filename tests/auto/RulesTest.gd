@@ -139,7 +139,7 @@ func _run_step():
 			var b = _data.barracks
 			check("barracks finishes", b.is_constructed(), "(%.2f)" % b.progress)
 			var lanes = _match.lanes_for_player(_me).filter(func(l): return Teams.is_enemy(_match.player_for_slot(l.b if l.a == 0 else l.a), _me))
-			_data.squads_before = _my_squads().size()
+			_data.squads_before = _match._next_squad_id
 			cmd({"type": "set_auto_repeat", "building": b.net_id, "enabled": true, "lane": lanes[0].index})
 			wait(5)
 		8:
@@ -147,7 +147,9 @@ func _run_step():
 			wait(150)
 		9:
 			var b = _data.barracks
-			check("villagers hauled supply and a squadron was trained", _my_squads().size() > _data.squads_before, "(supply %s)" % b.supply)
+			check("auto-repeat trains a squadron paid from the stockpile", _match._next_squad_id > _data.squads_before)
+			if _my_squads().is_empty():
+				_match.spawn_squadron(_me, "infantry", b, -1)  # the trained one may already have died on its lane
 			var squad = _my_squads()[0]
 			hero().global_position = squad.center() + Vector3(2, 0, 0)
 			hero().order_stop()
@@ -168,12 +170,14 @@ func _run_step():
 			wait(0.5)
 		13:
 			var squad = _my_squads()[0]
-			check("squad orders are refused when the hero is far away", squad.state != squad.State.RETURN or squad.center().distance_to(hero().global_position) <= GameData.COMMAND_RANGE)
+			check("squad orders work from anywhere on the map", squad.state == squad.State.RETURN)
+			cmd({"type": "squad_order", "squads": [squad.squad_id], "order": "follow"})
+			check("Follow me puts the squadron on your hero", squad.state == squad.State.FOLLOW)
 			# Ages and the Storehouse
 			cmd({"type": "advance_age"})
 			wait(65)
 		14:
-			check("advanced to Age II with the hero at the Town Center", _me.age == 2, "(age %d)" % _me.age)
+			check("advanced to Age II", _me.age == 2, "(age %d)" % _me.age)
 			_data.store_spot = free_spot("storehouse", tc().global_position)
 			cmd({"type": "build", "building": "storehouse", "pos": _data.store_spot})
 			wait(1)
@@ -330,7 +334,7 @@ func _run_step():
 			check("Siege Works can be placed in Age III", _site("siege_works") != null)
 			var sb = _site("special_building")
 			check("faction special building uses the faction name", sb != null and sb.display_name == GameData.SPECIAL_BUILDING_NAMES[_me.faction], "(%s)" % (sb.display_name if sb != null else "none"))
-			var grond = GameData.troop_stats("mordor", "special")
+			var grond = GameData.troop_stats("mordor", "heavy")
 			check("Grond is a siege unit", grond.siege and grond.squad_size == 1)
 			# an Isengard sapper blows up on a building and dies
 			var enemy = null

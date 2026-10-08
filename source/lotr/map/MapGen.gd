@@ -20,12 +20,12 @@ const GRASS = Color("5c7d3a")
 # lanes: pairs of spawn indices. With the default teams (0+2 vs 1+3) the west and east edges
 # are the ally routes, the rest are enemy lanes.
 const LANE_DEFS = [
-	{"a": 0, "b": 1, "name": "North"},
-	{"a": 2, "b": 3, "name": "South"},
-	{"a": 0, "b": 2, "name": "West"},
-	{"a": 1, "b": 3, "name": "East"},
-	{"a": 0, "b": 3, "name": "Diagonal NW-SE"},
-	{"a": 1, "b": 2, "name": "Diagonal NE-SW"},
+	{"a": 0, "b": 1, "name": "Top"},
+	{"a": 2, "b": 3, "name": "Bottom"},
+	{"a": 0, "b": 2, "name": "Left"},
+	{"a": 1, "b": 3, "name": "Right"},
+	{"a": 0, "b": 3, "name": "Diagonal Mid"},
+	{"a": 1, "b": 2, "name": "Diagonal Mid"},
 ]
 
 
@@ -86,9 +86,18 @@ static func build_lanes() -> Array:
 		var start = a + dir * 6.0
 		var end = b - dir * 6.0
 		var length = start.distance_to(end)
-		var steps = maxi(2, int(length / LANE_STEP))
+		# lanes wind: an S-curve offset sideways from the straight line, zero at both ends (and
+		# at the middle of the diagonals, so they still cross at the Cave Troll's lair)
+		var side = Vector3(-dir.z, 0, dir.x)
+		var diagonal = d.name.ends_with("Mid")
+		var amplitude = 9.0 if diagonal else 7.5
+		var steps = maxi(2, int(length / 4.0))
 		for s in range(steps + 1):
-			points.append(start.lerp(end, float(s) / steps))
+			var t = float(s) / steps
+			var p = start.lerp(end, t) + side * amplitude * sin(TAU * t) * sin(PI * t) * (1.0 if i % 2 == 0 else -1.0)
+			p.x = clamp(p.x, 6.0, SIZE - 6.0)
+			p.z = clamp(p.z, 6.0, SIZE - 6.0)
+			points.append(p)
 		lanes.append({"index": i, "a": d.a, "b": d.b, "name": d.name, "points": points})
 	return lanes
 
@@ -102,17 +111,27 @@ static func lane_points_from(lane: Dictionary, spawn_index: int) -> Array:
 
 
 static func camp_sites() -> Array:
-	"""Jungle camps: two in each wedge of land between the lanes, plus the Cave Troll's lair in
-	the middle where the two diagonal lanes cross."""
+	"""Jungle camps: three in each wedge of land between the lanes, the Cave Troll's lair in the
+	middle where the diagonal lanes cross, and two deer herds outside every base."""
 	var c = SIZE / 2.0
-	var sites = [{"camp": "troll", "pos": Vector3(c, 0, c)}]
+	var center = Vector3(c, 0, c)
+	var lanes = build_lanes()
+	var sites = [{"camp": "troll", "pos": center}]
 	var wedges = [Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0)]
 	for i in range(wedges.size()):
 		var out = wedges[i]
 		var side = Vector3(-out.z, 0, out.x)
-		var base = Vector3(c, 0, c) + out * SIZE * 0.3
-		sites.append({"camp": "spiders" if i % 2 == 0 else "wargs", "pos": base + side * 13.0})
-		sites.append({"camp": "wargs" if i % 2 == 0 else "spiders", "pos": base - side * 13.0})
+		var base = center + out * SIZE * 0.3
+		var a = "spiders" if i % 2 == 0 else "wargs"
+		var b = "wargs" if i % 2 == 0 else "spiders"
+		for spot in [[a, base + side * 13.0], [b, base - side * 13.0], [b, center + out * 21.0]]:
+			sites.append({"camp": spot[0], "pos": _push_off_lanes(spot[1], lanes)})
+	for spawn in spawn_points():
+		var to_center = (center - spawn).normalized()
+		var ang = atan2(to_center.z, to_center.x)
+		for off in [-0.4, 0.4]:
+			var p = spawn + Vector3(cos(ang + off), 0, sin(ang + off)) * 30.0
+			sites.append({"camp": "herd", "pos": _push_off_lanes(p, lanes)})
 	return sites
 
 
@@ -140,6 +159,18 @@ static func _paint_lanes(map, lanes):
 			road.position = (a + b) / 2.0 + Vector3(0, 0.06, 0)
 			road.rotation.y = atan2(b.x - a.x, b.z - a.z)
 			root.add_child(road)
+			# a round patch at each joint so bends have no gaps
+			var joint = MeshInstance3D.new()
+			var disc = CylinderMesh.new()
+			disc.top_radius = 1.6
+			disc.bottom_radius = 1.6
+			disc.height = 0.01
+			disc.radial_segments = 12
+			joint.mesh = disc
+			joint.material_override = dirt
+			joint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			joint.position = b + Vector3(0, 0.065, 0)
+			root.add_child(joint)
 
 
 static func _distance_to_lanes(point: Vector3, lanes: Array) -> float:

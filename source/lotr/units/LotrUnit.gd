@@ -38,6 +38,7 @@ var _base_armor = -1.0
 var last_attacker = null
 var anim_driver = null
 var last_attack_at = -10.0  # game time of the latest swing (replicated so puppets animate too)
+var last_hit_target = null  # who that swing was aimed at (target priority reads it)
 
 var order = Order.IDLE
 var order_target = null  # unit for ATTACK
@@ -214,7 +215,16 @@ func _process_idle(delta):
 		return
 	_retarget_timer = RETARGET_INTERVAL
 	var reach = attack_range if order == Order.HOLD else _acquire_range()
-	var enemy = Combat.closest_enemy(self, global_position, reach)
+	if _movement == null:
+		reach = attack_range + 1.0  # towers only consider what they can actually hit
+	var enemy = Combat.pick_target(self, global_position, reach)
+	# stick with the current victim unless something more urgent (someone hitting our hero)
+	# turns up: LoL towers and minions don't flicker between targets
+	var current = last_hit_target
+	if current != null and is_instance_valid(current) and current.is_alive() and enemy != current:
+		var in_reach = global_position_yless.distance_to(current.global_position_yless) <= reach + _target_radius(current)
+		if in_reach and (enemy == null or Combat.target_tier(self, enemy) > 1):
+			enemy = current
 	if enemy == null:
 		return
 	if order == Order.HOLD or _movement == null:
@@ -276,6 +286,7 @@ func _try_hit(target):
 	if distance > attack_range + _target_radius(target) + 0.2:
 		return
 	_next_hit_at = now + attack_interval / (attack_speed_mult * (1.0 + attack_speed_bonus))
+	last_hit_target = target
 	_face(target.global_position)
 	notify_attack()
 	# the blow lands partway into the swing (or the arrow leaves the string); towers fire at once

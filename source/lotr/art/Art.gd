@@ -49,7 +49,7 @@ const MOUNTED = {"rohan": ["rider", "heavy", "special"]}
 const DEFAULT_MOUNTED = ["rider"]
 # siege engines built procedurally in UnitFactory (no KayKit model for them)
 const SIEGE = {
-	"gondor": {"heavy": "trebuchet"}, "isengard": {"heavy": "ram"}, "mordor": {"special": "grond"},
+	"gondor": {"heavy": "trebuchet"}, "isengard": {"heavy": "ram"}, "mordor": {"heavy": "grond"},
 }
 
 # unit look: model, visible props, tint, scale, animation set, hidden meshes
@@ -75,8 +75,7 @@ const UNITS = {
 		"infantry": ["Barbarian", ["1H_Axe", "Barbarian_Round_Shield"], ORC, 0.92, "melee"],
 		"archer": ["Rogue", ["1H_Crossbow"], ORC, 0.9, "ranged1h"],
 		"rider": ["Barbarian", ["1H_Axe"], ORC, 0.85, "melee"],
-		"heavy": ["Barbarian", ["2H_Axe"], Color(0.6, 0.6, 0.55), 2.1, "melee2h"],
-		"special": ["Barbarian", ["2H_Axe"], ORC, 1.3, "melee2h"],
+		"special": ["Barbarian", ["2H_Axe"], Color(0.6, 0.6, 0.55), 2.1, "melee2h"],  # Mountain Trolls
 	},
 	"isengard":
 	{

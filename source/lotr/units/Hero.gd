@@ -199,11 +199,32 @@ func _physics_process(delta):
 			_respawn()
 		return
 	mana = min(mana_max, mana + mana_regen * delta)
+	_fountain_tick(delta)
 	if recall_until > 0.0:
 		_recall_tick()
 	if pending_cast != null:
 		_pending_cast_tick()
 	super(delta)
+
+
+const FOUNTAIN_RANGE = 10.0
+const FOUNTAIN_HP_PER_SEC = 0.06  # fraction of max per second at your own Town Center
+const FOUNTAIN_MANA_PER_SEC = 0.08
+
+
+func _fountain_tick(delta):
+	"""Like the fountain in League of Legends: your hero heals fast next to your Town Center."""
+	var tc = _find_town_center()
+	if tc == null or global_position_yless.distance_to(tc.global_position_yless) > FOUNTAIN_RANGE + tc.stats_size():
+		return
+	_fountain_carry += hp_max * FOUNTAIN_HP_PER_SEC * delta
+	if _fountain_carry >= 1.0:
+		hp = min(hp_max, hp + int(_fountain_carry))
+		_fountain_carry -= int(_fountain_carry)
+	mana = min(mana_max, mana + mana_max * FOUNTAIN_MANA_PER_SEC * delta)
+
+
+var _fountain_carry = 0.0
 
 
 func queue_cast(key: String, target):

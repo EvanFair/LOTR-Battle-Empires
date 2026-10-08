@@ -6,7 +6,7 @@ const RESOURCES = ["food", "wood", "stone", "iron", "gold"]
 var _game_time = 0.0  # seconds of simulated (unpaused) game time
 const GATHERABLE = ["food", "wood", "stone", "iron"]
 
-const STARTING_RESOURCES = {"food": 300, "wood": 300, "stone": 150, "iron": 100, "gold": 0}
+const STARTING_RESOURCES = {"food": 400, "wood": 400, "stone": 200, "iron": 150, "gold": 0}
 
 # --- distances (metres) and timings (seconds) -------------------------------------------------
 const COMMAND_RANGE = 15.0  # hero must be this close to order a squadron or villager group
@@ -15,9 +15,9 @@ const BASE_RADIUS = 22.0  # building zone around a Town Center
 const MULTI_HERO_BUILD_SPEED = 1.5
 const AUTO_REPEAT_INTERVAL = 60.0
 const VILLAGERS_PER_HOUSE = 3  # kept small so a mid-range laptop can run 4 full bases
-const MAX_HOUSES = 10
-const VILLAGER_RESPAWN_TIME = 45.0
-const VILLAGER_RESPAWN_COST = {"food": 50}
+const MAX_HOUSES = 6  # playtest: far fewer villagers, more hero action
+const VILLAGER_RESPAWN_TIME = 30.0
+const VILLAGER_RESPAWN_COST = {}  # free: losing all Food must never stall the economy
 const VILLAGER_CARRY = 16
 const HAUL_LOAD = 16
 const STOREHOUSE_REBUILD_COOLDOWN = 120.0
@@ -111,7 +111,7 @@ const FACTIONS = {
 		"units":
 		{
 			"infantry": "Orc Warriors", "archer": "Orc Archers", "rider": "Warg Riders",
-			"heavy": "Mountain Trolls", "special": "Grond",
+			"heavy": "Grond", "special": "Mountain Trolls",
 		},
 		"mods":
 		{
@@ -190,7 +190,7 @@ const HEROES = {
 	{
 		"name": "Aragorn", "faction": "gondor", "role": "Fighter",
 		"hp": 650, "mana": 200, "damage": 28, "interval": 1.0, "range": 1.8, "speed": 4.0,
-		"sight": 12.0, "hp_per_level": 70, "damage_per_level": 4, "mana_regen": 2.0,
+		"sight": 12.0, "hp_per_level": 70, "damage_per_level": 4, "mana_regen": 0.8,
 		"abilities":
 		[
 			{"key": "Q", "name": "Andúril Strike", "kind": "execute_strike", "cooldown": 8.0,
@@ -211,7 +211,7 @@ const HEROES = {
 	{
 		"name": "Boromir", "faction": "gondor", "role": "Vanguard",
 		"hp": 760, "mana": 180, "damage": 25, "interval": 1.05, "range": 1.8, "speed": 3.9,
-		"sight": 11.0, "hp_per_level": 85, "damage_per_level": 3, "mana_regen": 2.0,
+		"sight": 11.0, "hp_per_level": 85, "damage_per_level": 3, "mana_regen": 0.8,
 		"abilities":
 		[
 			{"key": "Q", "name": "Shield Bash", "kind": "strike", "cooldown": 9.0, "mana": 40,
@@ -231,7 +231,7 @@ const HEROES = {
 	{
 		"name": "Faramir", "faction": "gondor", "role": "Ranger",
 		"hp": 540, "mana": 210, "damage": 26, "interval": 1.1, "range": 7.5, "speed": 4.1,
-		"sight": 13.0, "hp_per_level": 60, "damage_per_level": 4, "mana_regen": 2.4,
+		"sight": 13.0, "hp_per_level": 60, "damage_per_level": 4, "mana_regen": 0.96,
 		"ranged": true,
 		"abilities":
 		[
@@ -255,7 +255,7 @@ const HEROES = {
 	{
 		"name": "Théoden", "faction": "rohan", "role": "Enchanter",
 		"hp": 600, "mana": 220, "damage": 24, "interval": 1.0, "range": 1.8, "speed": 4.2,
-		"sight": 12.0, "hp_per_level": 65, "damage_per_level": 3, "mana_regen": 2.5,
+		"sight": 12.0, "hp_per_level": 65, "damage_per_level": 3, "mana_regen": 1.0,
 		"abilities":
 		[
 			{"key": "Q", "name": "Herugrim", "kind": "nova", "cooldown": 8.0, "mana": 40,
@@ -274,7 +274,7 @@ const HEROES = {
 	{
 		"name": "Éomer", "faction": "rohan", "role": "Fighter",
 		"hp": 640, "mana": 190, "damage": 27, "interval": 1.0, "range": 1.9, "speed": 4.3,
-		"sight": 12.0, "hp_per_level": 72, "damage_per_level": 4, "mana_regen": 2.0,
+		"sight": 12.0, "hp_per_level": 72, "damage_per_level": 4, "mana_regen": 0.8,
 		"abilities":
 		[
 			{"key": "Q", "name": "Spear Throw", "kind": "skillshot", "cooldown": 8.0, "mana": 40,
@@ -296,7 +296,7 @@ const HEROES = {
 	{
 		"name": "Éowyn", "faction": "rohan", "role": "Assassin",
 		"hp": 560, "mana": 180, "damage": 29, "interval": 0.9, "range": 1.7, "speed": 4.3,
-		"sight": 12.0, "hp_per_level": 62, "damage_per_level": 5, "mana_regen": 2.0,
+		"sight": 12.0, "hp_per_level": 62, "damage_per_level": 5, "mana_regen": 0.8,
 		"abilities":
 		[
 			{"key": "Q", "name": "Shieldmaiden", "kind": "execute_strike", "cooldown": 7.0,
@@ -317,7 +317,7 @@ const HEROES = {
 	{
 		"name": "Gothmog", "faction": "mordor", "role": "Vanguard",
 		"hp": 780, "mana": 180, "damage": 24, "interval": 1.1, "range": 1.8, "speed": 3.8,
-		"sight": 11.0, "hp_per_level": 90, "damage_per_level": 3, "mana_regen": 2.0,
+		"sight": 11.0, "hp_per_level": 90, "damage_per_level": 3, "mana_regen": 0.8,
 		"abilities":
 		[
 			{"key": "Q", "name": "Cleave", "kind": "nova", "cooldown": 8.0, "mana": 35,
@@ -337,7 +337,7 @@ const HEROES = {
 	{
 		"name": "Witch-king", "faction": "mordor", "role": "Enchanter",
 		"hp": 600, "mana": 240, "damage": 27, "interval": 1.1, "range": 1.9, "speed": 4.0,
-		"sight": 13.0, "hp_per_level": 68, "damage_per_level": 4, "mana_regen": 2.6,
+		"sight": 13.0, "hp_per_level": 68, "damage_per_level": 4, "mana_regen": 1.04,
 		"abilities":
 		[
 			{"key": "Q", "name": "Morgul Blade", "kind": "strike", "cooldown": 8.0, "mana": 45,
@@ -358,7 +358,7 @@ const HEROES = {
 	{
 		"name": "Shelob", "faction": "mordor", "role": "Diver",
 		"hp": 700, "mana": 170, "damage": 30, "interval": 1.0, "range": 1.9, "speed": 4.4,
-		"sight": 11.0, "hp_per_level": 78, "damage_per_level": 5, "mana_regen": 2.0,
+		"sight": 11.0, "hp_per_level": 78, "damage_per_level": 5, "mana_regen": 0.8,
 		"abilities":
 		[
 			{"key": "Q", "name": "Sting", "kind": "strike", "cooldown": 9.0, "mana": 40,
@@ -378,7 +378,7 @@ const HEROES = {
 	{
 		"name": "Uglúk", "faction": "isengard", "role": "Vanguard",
 		"hp": 770, "mana": 170, "damage": 26, "interval": 1.05, "range": 1.8, "speed": 3.9,
-		"sight": 11.0, "hp_per_level": 88, "damage_per_level": 3, "mana_regen": 2.0,
+		"sight": 11.0, "hp_per_level": 88, "damage_per_level": 3, "mana_regen": 0.8,
 		"abilities":
 		[
 			{"key": "Q", "name": "Cleave", "kind": "nova", "cooldown": 8.0, "mana": 35,
@@ -397,7 +397,7 @@ const HEROES = {
 	{
 		"name": "Saruman", "faction": "isengard", "role": "Caster",
 		"hp": 520, "mana": 260, "damage": 24, "interval": 1.2, "range": 7.0, "speed": 3.9,
-		"sight": 13.0, "hp_per_level": 55, "damage_per_level": 4, "mana_regen": 3.0,
+		"sight": 13.0, "hp_per_level": 55, "damage_per_level": 4, "mana_regen": 1.2,
 		"ranged": true,
 		"abilities":
 		[
@@ -418,7 +418,7 @@ const HEROES = {
 	{
 		"name": "Lurtz", "faction": "isengard", "role": "Diver",
 		"hp": 560, "mana": 180, "damage": 30, "interval": 1.2, "range": 7.0, "speed": 4.1,
-		"sight": 12.0, "hp_per_level": 60, "damage_per_level": 5, "mana_regen": 2.0,
+		"sight": 12.0, "hp_per_level": 60, "damage_per_level": 5, "mana_regen": 0.8,
 		"ranged": true,
 		"abilities":
 		[
@@ -437,60 +437,61 @@ const HEROES = {
 }
 
 # --- buildings and ages -----------------------------------------------------------------------
-# size: footprint radius (m). base_only: must be placed inside your base zone.
+# size: footprint radius (m). Buildings can go anywhere on the map (playtest feedback).
+# desc: one line shown in the build menu.
 const BUILDINGS = {
 	"town_center":
 	{
-		"name": "Town Center", "hp": 3000, "cost": {}, "build_time": 0.0, "age": 1,
+		"name": "Town Center", "desc": "Your capital. Villagers drop resources here, it shoots enemies, heals your hero, and advances your Age.", "hp": 3000, "cost": {}, "build_time": 0.0, "age": 1,
 		"size": 3.0, "sight": 14.0, "attack": {"damage": 12, "interval": 1.5, "range": 9.0},
 		"buildable": false,
 	},
 	"village_house":
 	{
-		"name": "Village House", "hp": 400, "cost": {"wood": 50}, "build_time": 30.0, "age": 1,
-		"size": 1.6, "sight": 6.0, "base_only": true,
+		"name": "Village House", "desc": "Home for 3 villagers. Click it to choose what they gather.", "hp": 400, "cost": {"wood": 50}, "build_time": 15.0, "age": 1,
+		"size": 1.6, "sight": 6.0, "base_only": false,
 	},
 	"watchtower":
 	{
-		"name": "Watchtower", "hp": 700, "cost": {"wood": 50, "stone": 125}, "build_time": 120.0,
-		"age": 1, "size": 1.2, "sight": 13.0, "base_only": false,
+		"name": "Watchtower", "desc": "Shoots enemies in range. Up to 10 per player (6 come with your base).", "hp": 700, "cost": {"wood": 50, "stone": 125}, "build_time": 60.0,
+		"age": 1, "size": 1.2, "sight": 13.0, "base_only": false, "max": 10,
 		"attack": {"damage": 10, "interval": 1.5, "range": 10.0},
 	},
 	"barracks":
 	{
-		"name": "Barracks", "hp": 1200, "cost": {"wood": 150, "stone": 50}, "build_time": 90.0,
-		"age": 1, "size": 2.6, "sight": 8.0, "base_only": true, "trains": "infantry",
+		"name": "Barracks", "desc": "Trains infantry squadrons. Turn on auto-repeat to send one down a lane every minute.", "hp": 1200, "cost": {"wood": 150, "stone": 50}, "build_time": 45.0,
+		"age": 1, "size": 2.6, "sight": 8.0, "base_only": false, "trains": "infantry",
 	},
 	"archery_range":
 	{
-		"name": "Archery Range", "hp": 1100, "cost": {"wood": 175}, "build_time": 105.0,
-		"age": 2, "size": 2.6, "sight": 8.0, "base_only": true, "trains": "archer",
+		"name": "Archery Range", "desc": "Trains archer squadrons: strong against infantry, weak against riders.", "hp": 1100, "cost": {"wood": 175}, "build_time": 52.0,
+		"age": 2, "size": 2.6, "sight": 8.0, "base_only": false, "trains": "archer",
 	},
 	"stables":
 	{
-		"name": "Stables", "hp": 1100, "cost": {"wood": 175, "stone": 25}, "build_time": 105.0,
-		"age": 2, "size": 2.6, "sight": 8.0, "base_only": true, "trains": "rider",
+		"name": "Stables", "desc": "Trains rider squadrons: fast, strong against archers.", "hp": 1100, "cost": {"wood": 175, "stone": 25}, "build_time": 52.0,
+		"age": 2, "size": 2.6, "sight": 8.0, "base_only": false, "trains": "rider",
 	},
 	"storehouse":
 	{
-		"name": "Storehouse", "hp": 900, "cost": {"wood": 100, "stone": 75}, "build_time": 60.0,
-		"age": 2, "size": 2.0, "sight": 7.0, "base_only": true, "max": 1,
+		"name": "Storehouse", "desc": "A second drop-off point for villagers. If it is destroyed you lose half your stockpile.", "hp": 900, "cost": {"wood": 100, "stone": 75}, "build_time": 30.0,
+		"age": 2, "size": 2.0, "sight": 7.0, "base_only": false, "max": 1,
 	},
 	"blacksmith":
 	{
-		"name": "Blacksmith", "hp": 900, "cost": {"wood": 125, "stone": 75}, "build_time": 75.0,
-		"age": 2, "size": 2.0, "sight": 7.0, "base_only": true, "max": 1, "researches": true,
+		"name": "Blacksmith", "desc": "Researches upgrades that make all future troops stronger (more damage, armour, bigger squads).", "hp": 900, "cost": {"wood": 125, "stone": 75}, "build_time": 37.0,
+		"age": 2, "size": 2.0, "sight": 7.0, "base_only": false, "max": 1, "researches": true,
 	},
 	"siege_works":
 	{
-		"name": "Siege Works", "hp": 1300, "cost": {"wood": 250, "stone": 100, "iron": 50},
-		"build_time": 150.0, "age": 3, "size": 2.8, "sight": 8.0, "base_only": true,
+		"name": "Siege Works", "desc": "Trains your heavy unit: siege engines that wreck buildings (Mordor: Grond).", "hp": 1300, "cost": {"wood": 250, "stone": 100, "iron": 50},
+		"build_time": 75.0, "age": 3, "size": 2.8, "sight": 8.0, "base_only": false,
 		"trains": "heavy",
 	},
 	"special_building":
 	{
-		"name": "Special", "hp": 1400, "cost": {"wood": 200, "stone": 150, "gold": 50},
-		"build_time": 180.0, "age": 3, "size": 2.6, "sight": 9.0, "base_only": true,
+		"name": "Special", "desc": "Trains your faction's elite unit (Rangers, Horse Archers, Mountain Trolls, Sappers).", "hp": 1400, "cost": {"wood": 200, "stone": 150, "gold": 50},
+		"build_time": 90.0, "age": 3, "size": 2.6, "sight": 9.0, "base_only": false,
 		"trains": "special", "max": 1,
 	},
 }
@@ -522,11 +523,11 @@ const UNIT_OVERRIDES = {
 	},
 	"mordor":
 	{
-		"heavy": {"hp": 650, "damage": 42, "interval": 2.2, "range": 2.2, "speed": 2.0,
-			"ranged": false, "squad_size": 2, "counter_as": "heavy", "armor": 0.15},
-		"special": {"hp": 1600, "damage": 220, "interval": 5.0, "range": 2.6, "speed": 1.1,
+		"heavy": {"hp": 1600, "damage": 220, "interval": 5.0, "range": 2.6, "speed": 1.1,
 			"ranged": false, "siege": true, "squad_size": 1, "counter_as": "heavy",
 			"armor": 0.35, "radius": 1.6},
+		"special": {"hp": 650, "damage": 42, "interval": 2.2, "range": 2.2, "speed": 2.0,
+			"ranged": false, "squad_size": 2, "counter_as": "heavy", "armor": 0.15},
 	},
 	"isengard":
 	{
@@ -542,13 +543,13 @@ const UNIT_OVERRIDES = {
 # Blacksmith research. Applies to squadrons trained after it finishes.
 const UPGRADES = {
 	"forged_blades": {"name": "Forged Blades", "desc": "+15% damage for all troops",
-		"cost": {"iron": 150, "gold": 30}, "time": 45.0, "age": 2},
+		"cost": {"iron": 150, "gold": 30}, "time": 22.0, "age": 2},
 	"plated_armour": {"name": "Plated Armour", "desc": "Troops take 12% less damage",
-		"cost": {"iron": 200, "gold": 40}, "time": 50.0, "age": 2},
+		"cost": {"iron": 200, "gold": 40}, "time": 25.0, "age": 2},
 	"war_drills": {"name": "War Drills", "desc": "+1 soldier in infantry and archer squadrons",
-		"cost": {"food": 300, "gold": 60}, "time": 60.0, "age": 3},
+		"cost": {"food": 300, "gold": 60}, "time": 30.0, "age": 3},
 	"master_smiths": {"name": "Master Smiths", "desc": "+15% damage and +10% HP for all troops",
-		"cost": {"iron": 350, "gold": 120}, "time": 75.0, "age": 3},
+		"cost": {"iron": 350, "gold": 120}, "time": 37.0, "age": 3},
 }
 
 const BUILD_MENU = [
@@ -557,9 +558,9 @@ const BUILD_MENU = [
 ]
 
 const AGES = {
-	2: {"name": "Kingdom", "cost": {"food": 400, "wood": 200, "stone": 100}, "time": 60.0},
-	3: {"name": "Empire", "cost": {"food": 800, "stone": 300, "iron": 300, "gold": 100},
-		"time": 90.0},
+	2: {"name": "Kingdom", "cost": {"food": 200, "wood": 150, "stone": 50}, "time": 30.0},
+	3: {"name": "Empire", "cost": {"food": 400, "stone": 150, "iron": 150, "gold": 50},
+		"time": 45.0},
 }
 const AGE_NAMES = {1: "Settlement", 2: "Kingdom", 3: "Empire"}
 
@@ -573,29 +574,36 @@ const VILLAGER_STATS = {
 # back; dragged further than LEASH_RANGE from home they walk back and heal (MOBA leashing).
 const LEASH_RANGE = 14.0
 const CREATURES = {
+	# deer: harmless game you hunt for Food (never fight back)
+	"deer":
+	{
+		"name": "Deer", "hp": 60, "damage": 0, "interval": 1.0, "range": 1.0, "speed": 3.0,
+		"sight": 6.0, "radius": 0.5, "armor": 0.0, "gold": 0, "xp": 5, "food": 120, "passive": true,
+	},
 	"spider":
 	{
-		"name": "Mirkwood Spider", "hp": 240, "damage": 15, "interval": 1.1, "range": 1.5,
-		"speed": 3.6, "sight": 7.0, "radius": 0.6, "armor": 0.0, "gold": 22, "xp": 35,
+		"name": "Mirkwood Spider", "hp": 170, "damage": 12, "interval": 1.1, "range": 1.5,
+		"speed": 3.6, "sight": 7.0, "radius": 0.6, "armor": 0.0, "gold": 35, "xp": 60, "food": 40,
 	},
 	"warg":
 	{
-		"name": "Wild Warg", "hp": 280, "damage": 17, "interval": 1.0, "range": 1.6,
-		"speed": 4.2, "sight": 7.0, "radius": 0.55, "armor": 0.05, "gold": 24, "xp": 40,
+		"name": "Wild Warg", "hp": 200, "damage": 13, "interval": 1.0, "range": 1.6,
+		"speed": 4.2, "sight": 7.0, "radius": 0.55, "armor": 0.05, "gold": 40, "xp": 65, "food": 60,
 	},
 	"cave_troll":
 	{
-		"name": "Cave Troll", "hp": 3400, "damage": 75, "interval": 2.3, "range": 2.6,
-		"speed": 2.8, "sight": 9.0, "radius": 1.3, "armor": 0.25, "gold": 160, "xp": 320,
-		"team_gold": 80, "boss": true,
+		"name": "Cave Troll", "hp": 2600, "damage": 60, "interval": 2.3, "range": 2.6,
+		"speed": 2.8, "sight": 9.0, "radius": 1.3, "armor": 0.2, "gold": 200, "xp": 400,
+		"team_gold": 120, "food": 300, "boss": true,
 		# whoever slays the troll: their team's heroes and troops hit harder for a while
-		"buff": {"name": "Troll-slayer", "stat": "damage", "mult": 1.2, "duration": 120.0},
+		"buff": {"name": "Troll-slayer", "stat": "damage", "mult": 1.25, "duration": 150.0},
 	},
 }
 const CAMPS = {
-	"spiders": {"creatures": ["spider", "spider", "spider"], "respawn": 75.0},
-	"wargs": {"creatures": ["warg", "warg", "warg"], "respawn": 75.0},
-	"troll": {"creatures": ["cave_troll"], "respawn": 240.0},
+	"spiders": {"creatures": ["spider", "spider", "spider"], "respawn": 60.0},
+	"wargs": {"creatures": ["warg", "warg"], "respawn": 60.0},
+	"herd": {"creatures": ["deer", "deer", "deer"], "respawn": 50.0},
+	"troll": {"creatures": ["cave_troll"], "respawn": 210.0},
 }
 
 # --- the Town Center shop ---------------------------------------------------------------------------
@@ -633,11 +641,11 @@ const SHOP_ORDER = [
 
 # --- resource nodes on the map ----------------------------------------------------------------
 const RESOURCE_NODES = {
-	# herds breed back: food nodes never vanish, they regrow (amount per second) up to "amount"
-	"food": {"name": "Game", "amount": 800, "regrow": 1.2, "color": Color("c98b5a")},
-	"wood": {"name": "Forest", "amount": 600, "color": Color("2f6b2a")},
-	"stone": {"name": "Quarry", "amount": 800, "color": Color("9a9a9a")},
-	"iron": {"name": "Iron Mine", "amount": 800, "color": Color("5a6573")},
+	# resources run out (Age of Empires style); hunting deer and jungle camps also give Food
+	"food": {"name": "Berry bushes", "amount": 900, "color": Color("c98b5a")},
+	"wood": {"name": "Forest", "amount": 1000, "color": Color("2f6b2a")},
+	"stone": {"name": "Quarry", "amount": 1200, "color": Color("9a9a9a")},
+	"iron": {"name": "Iron Mine", "amount": 1200, "color": Color("5a6573")},
 }
 
 

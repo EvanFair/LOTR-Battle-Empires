@@ -12,8 +12,8 @@ const ASSIGN_LABELS = {
 }
 const TOAST_TIME = 4.0
 const SQUAD_ORDER_BUTTONS = [
-	["1 Attack", "squad_attack"], ["2 Defend", "squad_defend"], ["3 Hold", "hold"],
-	["4 Return", "return"],
+	["G Follow me", "follow"], ["1 Attack", "squad_attack"], ["2 Move", "squad_defend"],
+	["3 Hold", "hold"], ["4 Return", "return"],
 ]
 
 var _match = null
@@ -36,6 +36,9 @@ var _military_tab = null
 var _age_tab = null
 var _upgrades_tab = null
 var _learn_buttons = {}
+var _base_tabs = null
+var _squad_lane = null
+var _drag_box = null
 var _item_buttons = []
 var _shop_tab = null
 var _base_hint = null
@@ -312,23 +315,55 @@ func _build_squad_panel():
 	panel.offset_top = -228
 	_squad_box = VBoxContainer.new()
 	panel.add_child(_squad_box)
-	_label(_squad_box, "Squadrons nearby (Tab)", 14, ACCENT)
-	_squad_hint = _label(_squad_box, "Move closer to a squadron to command it", 12, Color(1, 1, 1, 0.6))
+	_label(_squad_box, "Your squadrons", 14, ACCENT)
+	_squad_hint = _label(_squad_box, "Drag a box over soldiers or press Tab to select. Right-click orders them. G: follow me", 12, Color(1, 1, 1, 0.6))
 	_squad_hint.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_squad_list = VBoxContainer.new()
 	_squad_box.add_child(_squad_list)
-	_squad_detail = HBoxContainer.new()
+	_squad_detail = HFlowContainer.new()
 	_squad_box.add_child(_squad_detail)
 	for entry in SQUAD_ORDER_BUTTONS:
 		_button(_squad_detail, entry[0], _on_squad_order.bind(entry[1]))
+	_squad_lane = OptionButton.new()
+	_squad_lane.focus_mode = Control.FOCUS_NONE
+	_squad_lane.item_selected.connect(_on_squad_lane)
+	_squad_detail.add_child(_squad_lane)
+	_drag_box = ReferenceRect.new()
+	_drag_box.border_color = Color(0.55, 1.0, 0.55)
+	_drag_box.border_width = 1.5
+	_drag_box.editor_only = false
+	_drag_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_drag_box.visible = false
+	_root.add_child(_drag_box)
 
 
 func _on_squad_order(order):
 	var hc = _match.hero_controller
 	if order in ["squad_attack", "squad_defend"]:
 		hc._start_mode(order)
+	elif order == "follow":
+		hc._follow_me()
 	else:
 		hc._squad_order(order)
+
+
+func _on_squad_lane(idx):
+	var lane_index = _squad_lane.get_item_metadata(idx)
+	if lane_index != null and lane_index >= 0:
+		_match.hero_controller._squad_order("lane", {"lane": lane_index})
+	_squad_lane.select(0)
+
+
+func draw_drag_box(start, end):
+	if _drag_box == null:
+		return
+	if start == null or end == null or start.distance_to(end) < 8.0:
+		_drag_box.visible = false
+		return
+	var r = Rect2(start, Vector2.ZERO).expand(end)
+	_drag_box.position = r.position
+	_drag_box.size = r.size
+	_drag_box.visible = true
 
 
 func _refresh_squads():
@@ -341,10 +376,18 @@ func _refresh_squads():
 		if panel.offset_bottom != bottom:
 			panel.offset_bottom = bottom
 			panel.offset_top = bottom
-	var squads = _match.hero_controller.squads_in_range()
-	_squad_hint.visible = squads.is_empty()
-	_squad_detail.visible = not squads.is_empty()
-	var selected = _match.hero_controller.selected_squad
+	if _squad_lane.item_count == 0 and _match.local_player != null:
+		_squad_lane.add_item("Send to lane...", 0)
+		_squad_lane.set_item_metadata(0, -1)
+		var li = 1
+		for lane in _match.lanes_for_player(_match.local_player):
+			_squad_lane.add_item(_match.lane_label(lane.index, _match.local_player), li)
+			_squad_lane.set_item_metadata(li, lane.index)
+			li += 1
+	var squads = _match.hero_controller.my_squads()
+	_squad_hint.visible = true
+	_squad_detail.visible = not _match.hero_controller.selected_squads.is_empty()
+	var chosen = _match.hero_controller.selected_squads
 	var buttons = _squad_list.get_children()
 	for i in range(max(buttons.size(), squads.size())):
 		if i >= squads.size():
@@ -354,17 +397,17 @@ func _refresh_squads():
 		var b = buttons[i] if i < buttons.size() else _button(_squad_list, "", func(): pass)
 		if i >= buttons.size():
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var marker = "> " if s.id == selected else "   "
+		var marker = "> " if s.id in chosen else "   "
 		b.text = "%s%s x%d  %d%%  %s" % [
 			marker, s.name, s.count, int(s.hp * 100), _squad_state_name(s.state)
 		]
 		for c in b.pressed.get_connections():
 			b.pressed.disconnect(c.callable)
-		b.pressed.connect(_match.hero_controller.select_squad.bind(s.id))
+		b.pressed.connect(func(): _match.hero_controller.select_squad(s.id, Input.is_key_pressed(KEY_SHIFT)))
 
 
 func _squad_state_name(state):
-	return ["Idle", "Marching", "Attacking", "Defending", "Holding", "Returning"][state]
+	return ["Idle", "Marching", "Attacking", "Defending", "Holding", "Returning", "Following you"][state]
 
 
 func _build_mode_label():
@@ -399,6 +442,7 @@ func _build_base_panel():
 	_base_panel.add_child(box)
 	_label(box, "Base  (B)", 16, ACCENT)
 	var tabs = TabContainer.new()
+	_base_tabs = tabs
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(tabs)
 	_build_tab = _scroll_tab(tabs, "Build")
@@ -415,8 +459,8 @@ func _build_base_panel():
 		var trains = ""
 		if data.has("trains"):
 			trains = "\nTrains: %s" % GameData.FACTIONS[faction].units[data.trains]
-		b.tooltip_text = "%s\nCost: %s\nBuild time: %ds (your hero must stay nearby)%s" % [
-			GameData.building_name(key, faction), GameData.cost_text(data.cost), int(data.build_time), trains
+		b.tooltip_text = "%s\n%s\nCost: %s\nBuild time: %ds (your hero must stay nearby)%s" % [
+			GameData.building_name(key, faction), data.get("desc", ""), GameData.cost_text(data.cost), int(data.build_time), trains
 		]
 	_base_panel.visible = false
 	_base_hint = _label(_root, "", 13, Color(1, 1, 1, 0.75))
@@ -468,13 +512,21 @@ func minimap_ping(pos: Vector3, color = Color(1.0, 0.9, 0.4)):
 		minimap.ping(pos, color)
 
 
-func toggle_build_menu():
+var _opened_anywhere = false
+
+
+func toggle_build_menu(anywhere = false):
+	"""B opens the base panel at home; V opens it anywhere on the Build tab (you can build
+	anywhere; training, research, Ages and the shop still need you at home)."""
 	if _base_panel == null:
 		return
-	if not _base_panel.visible and not _in_base():
-		show_toast("Return to your base to build (Watchtowers can go anywhere: open in base, place anywhere)")
+	if not _base_panel.visible and not _in_base() and not anywhere:
+		show_toast("Return to your base for the base panel. Press V to build out here.")
 		return
 	_base_panel.visible = not _base_panel.visible
+	_opened_anywhere = _base_panel.visible and not _in_base()
+	if _opened_anywhere:
+		_base_tabs.current_tab = 0
 
 
 func _on_build_pressed(key):
@@ -483,9 +535,9 @@ func _on_build_pressed(key):
 
 func _refresh_base_panel():
 	var in_base = _in_base()
-	if _base_panel.visible and not in_base and _match.hero_controller.mode != "place":
+	if _base_panel.visible and not in_base and not _opened_anywhere and _match.hero_controller.mode != "place":
 		_base_panel.visible = false
-	_base_hint.text = "" if _base_panel.visible else ("Press B for the base panel" if in_base else "")
+	_base_hint.text = "" if _base_panel.visible else ("B: base panel   V: build" if in_base else "V: build here")
 	if not _base_panel.visible:
 		return
 	var p = _match.local_player
@@ -572,13 +624,9 @@ func _update_military_row(row, b):
 	var stats = b.squad_stats()
 	row.title.text = "%s: %s x%d" % [b.display_name, stats.name, stats.squad_size]
 	row.supply.value = b.supply_fraction() * 100.0
-	var cost = b.squad_cost()
-	var have = []
-	for res in cost:
-		have.append("%s %d/%d" % [RES_ICONS[res], b.supply.get(res, 0), cost[res]])
-	var status = "Supply: " + ", ".join(have)
-	if b.wants_supply() and not b.supply_full():
-		status += "\nWaiting for villagers to deliver supplies"
+	var status = "Cost per squadron: " + GameData.cost_text(b.squad_cost())
+	if (b.auto_repeat or b.manual_pending > 0) and not b.supply_full():
+		status += "\nWaiting for resources (paid from your stockpile)"
 	elif b.manual_pending > 0:
 		status += "\nTraining (%d queued)" % b.manual_pending
 	elif b.auto_repeat:
@@ -621,7 +669,7 @@ func _refresh_age_tab():
 		_label(_age_tab, "You have reached the final Age.", 13)
 		return
 	var age = GameData.AGES[next]
-	_label(_age_tab, "Next: %s Age\nCost: %s\nTime: %ds with your hero at the Town Center" % [
+	_label(_age_tab, "Next: %s Age\nCost: %s\nTime: %ds (your hero is free to leave)" % [
 		age.name, GameData.cost_text(age.cost), int(age.time)
 	], 13)
 	var unlocks = []

@@ -1,14 +1,18 @@
 extends Node
-## A group of soldiers of one type that fights as a unit. New squadrons march their lane;
-## a Hero standing nearby can order them: Attack, Defend, Hold, or Return home (to heal).
+## A group of soldiers of one type that fights as a unit. New squadrons march their lane.
+## The owner can order them from anywhere: Follow (stay with the hero and attack what the hero
+## attacks), Attack, Move/Defend, Hold, Return home (to heal) or back to a Lane.
 ## Runs on the host only; clients get a summary for the HUD.
 
-enum State { IDLE, MARCH, ATTACK, DEFEND, HOLD, RETURN }
+enum State { IDLE, MARCH, ATTACK, DEFEND, HOLD, RETURN, FOLLOW }
 
 const STATE_NAMES = {
 	State.IDLE: "Idle", State.MARCH: "Marching", State.ATTACK: "Attacking",
 	State.DEFEND: "Defending", State.HOLD: "Holding", State.RETURN: "Returning home",
+	State.FOLLOW: "Following you",
 }
+const FOLLOW_DISTANCE = 3.5  # how far behind the hero the formation keeps
+const FOLLOW_ASSIST_RANGE = 9.0  # enemies this close to the hero get attacked
 const TICK = 0.4
 const WAYPOINT_REACHED = 5.0
 const HOME_REACHED = 7.0
@@ -100,6 +104,23 @@ func order_hold():
 		m.order_hold()
 
 
+func order_follow():
+	state = State.FOLLOW
+	target_unit = null
+	_last_dest = null
+
+
+func order_lane(points: Array):
+	"""Back to a lane, joining it at the nearest waypoint instead of walking home first."""
+	var c = center()
+	var best = 0
+	for i in range(points.size()):
+		if points[i].distance_to(c) < points[best].distance_to(c):
+			best = i
+	march(points)
+	waypoint = best
+
+
 func order_return():
 	state = State.RETURN
 	_last_dest = null
@@ -127,6 +148,9 @@ func _tick():
 	if state == State.RETURN:
 		_tick_return(c)
 		return
+	if state == State.FOLLOW:
+		_tick_follow(alive, c)
+		return
 	var engage_from = c
 	if state == State.DEFEND:
 		engage_from = defend_point
@@ -134,6 +158,11 @@ func _tick():
 	if state == State.HOLD:
 		reach = alive[0].attack_range + 1.0
 	var enemy = _closest_enemy_near(alive, engage_from, reach)
+	if enemy != null and alive[0].get("siege") != true:
+		# squads pick by priority too (hero-attackers first), not just the nearest enemy
+		var urgent = Combat.pick_target(alive[0], engage_from, reach)
+		if urgent != null:
+			enemy = urgent
 	if state == State.ATTACK and _valid_target():
 		enemy = target_unit
 	if enemy != null:
@@ -156,6 +185,30 @@ func _tick():
 				_move_formation(alive, defend_point, c)
 		State.HOLD, State.IDLE:
 			pass
+
+
+func _tick_follow(alive, c):
+	var hero = player.hero if player != null else null
+	if hero == null or not is_instance_valid(hero) or not hero.is_alive():
+		var engaged = _closest_enemy_near(alive, c, GameData.SQUAD_AGGRO_RANGE)
+		if engaged != null:
+			_engage(alive, engaged)
+		return  # hero is dead: hold here and defend ourselves until they respawn
+	# attack what the hero attacks, else anything threatening the hero
+	var focus = null
+	if hero.order == hero.Order.ATTACK and hero.order_target != null and is_instance_valid(hero.order_target) and hero.order_target.is_alive():
+		focus = hero.order_target
+	if focus == null:
+		focus = Combat.pick_target(alive[0], hero.global_position, FOLLOW_ASSIST_RANGE)
+	if focus != null:
+		_engage(alive, focus)
+		return
+	# otherwise trail the hero in formation
+	var back = -hero.global_transform.basis.z
+	back.y = 0.0
+	var dest = hero.global_position - (back.normalized() if back.length() > 0.1 else Vector3.FORWARD) * FOLLOW_DISTANCE
+	if c.distance_to(dest) > 2.5:
+		_move_formation(alive, dest, c)
 
 
 func _tick_return(c):
@@ -201,15 +254,24 @@ func _closest_enemy_near(alive, from, reach):
 
 func _engage(alive, focus):
 	_last_dest = null
+	var forced = state == State.ATTACK or state == State.FOLLOW  # the player/hero chose the target
 	for m in alive:
-		if m.order == m.Order.ATTACK and m.order_target != null and is_instance_valid(m.order_target) and m.order_target.is_alive():
-			continue
 		if state == State.HOLD:
 			continue  # holding units only shoot what's in range (handled by the unit itself)
+		var busy = m.order == m.Order.ATTACK and m.order_target != null and is_instance_valid(m.order_target) and m.order_target.is_alive()
 		var own = null
-		if not (m.get("siege") == true and focus.unit_kind == "building"):
-			own = Combat.closest_enemy(m, m.global_position, m.attack_range + 3.0)
-		m.order_attack(own if own != null else focus)
+		if forced:
+			own = focus
+		elif not (m.get("siege") == true and focus.unit_kind == "building"):
+			own = Combat.pick_target(m, m.global_position, m.attack_range + 3.0)
+		if own == null:
+			own = focus
+		# keep fighting the current target unless the new one is more urgent (hits our hero)
+		if busy and m.order_target != own and not forced and Combat.target_tier(m, own) > 1:
+			continue
+		if busy and m.order_target == own:
+			continue
+		m.order_attack(own)
 
 
 func _move_formation(alive, dest: Vector3, c: Vector3):
@@ -237,4 +299,5 @@ func summary() -> Dictionary:
 		"id": squad_id, "player": player.slot_index, "class": unit_class,
 		"name": display_name, "count": alive_members().size(), "state": state,
 		"hp": hp_fraction(), "x": c.x, "z": c.z,
+		"members": alive_members().map(func(m): return m.net_id),
 	}

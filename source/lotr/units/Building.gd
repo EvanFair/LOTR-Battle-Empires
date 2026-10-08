@@ -179,7 +179,7 @@ func _process(_delta):
 		var alive = alive_villagers().size() if not puppet else get_meta("villagers_alive", 0)
 		text = "%s %d/%d" % [assignment.capitalize() if assignment != "home" else "Home", alive, GameData.VILLAGERS_PER_HOUSE]
 	elif trains != "" and is_in_group("controlled_units") and (auto_repeat or manual_pending > 0):
-		text = "Supply %d%%" % int(supply_fraction() * 100) if not supply_full() else "Next %ds" % ceili(cycle_left)
+		text = "Need resources" if not supply_full() else "Next %ds" % ceili(cycle_left)
 	elif building_key == "town_center" and age_target > 0:
 		text = "Age %d%%" % int(age_progress * 100)
 	elif research_key != "" and is_in_group("controlled_units"):
@@ -217,7 +217,9 @@ func squad_cost() -> Dictionary:
 
 
 func wants_supply():
-	return trains != "" and is_constructed() and (auto_repeat or manual_pending > 0)
+	# playtest feedback: hauling supplies was too fiddly, so training pays straight from the
+	# stockpile and villagers never haul
+	return false
 
 
 func supply_missing() -> Dictionary:
@@ -233,11 +235,8 @@ func supply_missing() -> Dictionary:
 
 
 func supply_full() -> bool:
-	var cost = squad_cost()
-	for res in cost:
-		if supply.get(res, 0) < cost[res]:
-			return false
-	return true
+	"""Can the owner pay for the next squadron right now?"""
+	return player.has_resources(squad_cost())
 
 
 func supply_fraction() -> float:
@@ -246,7 +245,7 @@ func supply_fraction() -> float:
 	var have = 0
 	for res in cost:
 		total += cost[res]
-		have += min(cost[res], supply.get(res, 0))
+		have += min(cost[res], player.get(res))
 	return 1.0 if total == 0 else float(have) / total
 
 
@@ -281,9 +280,7 @@ func _production_tick(delta):
 
 
 func _train_squad():
-	var cost = squad_cost()
-	for res in cost:
-		supply[res] = supply.get(res, 0) - cost[res]
+	player.subtract_resources(squad_cost())
 	var match_node = get_tree().get_first_node_in_group("lotr_match")
 	match_node.spawn_squadron(player, trains, self, lane)
 
@@ -368,10 +365,7 @@ func start_age_advance(target_age: int):
 
 
 func _age_tick(delta):
-	var presence = hero_presence()
-	if presence.friendly == 0 or presence.enemy > 0:
-		build_paused_reason = "enemy_hero" if presence.enemy > 0 else "no_hero"
-		return
+	# advancing no longer needs the hero standing at the Town Center (playtest feedback)
 	build_paused_reason = ""
 	age_progress += delta / GameData.AGES[age_target].time
 	if age_progress >= 1.0:
