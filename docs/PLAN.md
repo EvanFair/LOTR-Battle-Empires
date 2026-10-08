@@ -1,12 +1,12 @@
 # LOTR Battle Empires: Build Plan
 
-_Produced with the gstack-autoplan pipeline (CEO, then Eng, then Design review). Revision 3, 2026-10-08: villagers assigned per house, Stone added, heroes are the only builders, AoE-style team picker._
+_Produced with the gstack-autoplan pipeline (CEO, then Eng, then Design review). Revision 4, 2026-10-08: Storehouse and villager hauling, Food cost to replace villagers, enemy heroes pause construction, towers anywhere, **LAN multiplayer moved into the weekend**._
 
 ## Executive summary
 
 LOTR Battle Empires is a 4-player Lord of the Rings game with **Team (2v2)** and **Free-for-All** modes. Each player controls **only their Hero**, Dota-style. You assign villagers to gather resources, build in person with your Hero, and pay for troops like Age of Empires. The troops fight as **squadrons** that march down lanes, and you command them in person by standing near them.
 We fork **lampe-games/godot-open-rts** (MIT, Godot 4.3, 3D), which already has the economy, construction, pathfinding, fog of war, minimap and AI.
-Milestone 1 (the weekend) is a playable slice with 4 factions and 3 unit classes. Six more milestones take it to 8 factions, 5 unit classes each, 24 heroes, and LAN multiplayer.
+Milestone 1 (the weekend) is a playable slice **over LAN** with 4 factions and 3 unit classes. Five more milestones take it to 8 factions, 5 unit classes each, and 24 heroes.
 
 ---
 
@@ -18,7 +18,8 @@ Milestone 1 (the weekend) is a playable slice with 4 factions and 3 unit classes
 | **Control** | You control **only the Hero**. Right-click moves and attacks (Dota). You build, train and shop **only inside your base**. You order squadrons only when the Hero is **near** them. |
 | **Camera** | Locked to the Hero by default. Release it to look around freely. |
 | **Economy** | **Villagers (locals)** live in **Village Houses**. Each house holds one group of villagers, and you assign each group to **Food, Wood, Stone or Iron**. The number of groups on a resource sets how fast it's gathered. Killed villagers are replaced only after a **respawn delay**. **Gold** comes from killing jungle creatures, enemy units and heroes. You pay for every building and squadron, AoE-style. |
-| **Construction** | **Only heroes build.** The Hero places a building, then must **stay within build range** for the whole build timer (for example, a guard tower takes 2:00). Leaving pauses it. **Two or more heroes in range build 1.5× faster.** |
+| **Stockpile, Storehouse and hauling** | Your resources are **one shared total**. From Age II you can build **one Storehouse**, an extra drop-off and pick-up point. **If it is destroyed, you lose half of everything in your stockpile.** Military buildings can only train once villagers have **carried the cost to them** from the Town Center or Storehouse. Villagers do this automatically. |
+| **Construction** | **Only heroes build.** The Hero places a building, then must **stay within build range** for the whole build timer (for example, a guard tower takes 2:00). Leaving pauses it. **Two or more heroes in range build 1.5× faster.** **An enemy Hero in range also pauses it**, and enemies can attack the foundation to destroy it. **Towers can be built anywhere**; everything else is base-only. |
 | **Production** | **Each unit class has its own building.** Every building can train a squadron once (manual) or be set to **Auto-repeat**: choose a lane, and it trains 1 squadron every 60s, paid automatically. If you can't afford it, that cycle is skipped with a warning. |
 | **New squadrons** | **March their assigned lane** and fight until the Hero gives them a new order nearby. |
 | **Squadrons** | **One unit type each** (for example, 8 Gondor Archers). Orders: Attack this, Defend this, Hold position, Return home (regen). |
@@ -28,9 +29,9 @@ Milestone 1 (the weekend) is a playable slice with 4 factions and 3 unit classes
 | **Base** | Town Center with 3 guard towers, plus an outer ring of towers. You can build anywhere inside your base zone. |
 | **Map** | Lanes, a jungle with neutral monsters, and fog of war. |
 | **Win** | Last team with a Town Center standing wins. |
-| **Shop** | Hero items are bought at the **Town Center only**. |
+| **Shop** | Hero items are bought at the **Town Center only** (M2). |
 | **Match / scale** | About 30 minutes. 100+ units. Must run on an average laptop. Troops are AoE-style low-poly; heroes are more detailed. |
-| **Multiplayer** | LAN/Wi-Fi plus bots (Milestone 3). |
+| **Multiplayer** | **LAN/Wi-Fi plus bots, this weekend (M1).** |
 | **Settings** | Unit collision on/off, mode, bot difficulty, starting resources. |
 
 ---
@@ -74,28 +75,39 @@ In code, FFA is simply "each player is their own team", so supporting both modes
 | Gold | **Not gathered.** Earned from kills, jungle camps and heroes | Hero shop, Age III, special units |
 
 ### Villagers (locals)
-- Each **Village House** holds **one group of 5 villagers**. Building more houses gives more groups (and raises the population cap for squadrons).
+- Each **Village House** holds **one group of 5 villagers**. Building more houses gives more groups (and raises the population cap for squadrons). **Maximum 10 houses (50 villagers).**
 - **Clicking a house or its villagers shows 5 bubbles:** 🍖 Food · 🪵 Wood · 🪨 Stone · ⛏️ Iron · 🏠 **Return home**.
   - Picking a resource sends that group to the nearest node of that type. The villagers walk there and back physically, so enemies can raid them.
   - **Return home** pulls the group inside its house: safe from raids, but not gathering (like AoE's town bell).
 - **Gathering rate** = the groups assigned × the villagers alive in each group × the base rate. So in your example, with 5 houses you can put 2 groups on Wood and 1 each on Food, Stone and Iron, and Wood comes in twice as fast.
-- **When a villager dies,** its house replaces it after a **respawn delay** (default 45s per villager, free). A wiped-out group comes back one villager at a time.
+- **When a villager dies,** its house replaces it after a **respawn delay** (45s per villager) **for 50 Food**. If you can't afford it, the house waits until you can. A wiped-out group comes back one villager at a time.
 - **Command rule:** you can change assignments when the Hero is **inside the base** or **within command range** (15m) of the group, the same proximity rule as squadrons.
 - **Top bar:** shows each resource with its income per minute and how many groups are on it (for example, `🪵 340  +48/min  (2)`).
+
+### Stockpile, Storehouse and hauling
+- **One stockpile.** Your Food, Wood, Stone, Iron and Gold are single totals. There is no "how much is in which building".
+- **Access points.** The **Town Center** is always one. From **Age II** you can build **one Storehouse** anywhere in your base. Villagers drop gathered resources at the nearest access point, so a Storehouse next to the forest or mine shortens their trips.
+- **The risk:** if your Storehouse is destroyed, **every resource in your stockpile is halved**. You can rebuild it, but the loss is permanent. That makes it a juicy raid target and a reason to wall and tower it.
+- **Hauling (automatic).** Buildings and Age advances are paid straight from the stockpile. **Squadrons are different:** a military building trains only once its **supply** for the next squad has been carried to it.
+  - When a building needs supply, the next villagers who drop off at an access point pick up a load (10 units) and carry it to that building, then return to gathering. You don't assign this; it happens on its own.
+  - The cost is taken from the stockpile at pickup, so goods on the road are safe from a Storehouse loss but **lost if the villager is killed**.
+  - A building shows a **supply bar** (`Supply 60/90`). Its 60s auto-repeat timer only counts down when supply is full.
+  - Placing the Storehouse between your gathering spots and your barracks speeds up both gathering **and** troop production. Raiding villagers on the road starves the enemy army.
 
 **Ages are the "criteria" that unlock attack units, as in AoE.** You advance an Age at the Town Center by paying resources:
 
 | Age | Unlocks | Advance cost (draft) |
 |---|---|---|
 | **I: Settlement** (start) | Town Center, Village Houses, Lumber Camp, Quarry, Mine, Hunting Lodge/Farm, Watchtower, **Barracks** | — |
-| **II: Kingdom** | **Archery Range**, **Stables**, Blacksmith (upgrades), stone walls | 400 Food, 200 Wood, 100 Stone |
+| **II: Kingdom** | **Archery Range**, **Stables**, **Storehouse (1)**, Blacksmith (upgrades), stone walls | 400 Food, 200 Wood, 100 Stone |
 | **III: Empire** | **Siege Works** (heavy units), the faction's **Special building**, Tier-3 upgrades, bigger squads | 800 Food, 300 Stone, 400 Iron, 200 Gold |
 
 | Building | Trains / does | Class |
 |---|---|---|
 | Town Center | Comes with 1 Village House. Advances Ages, respawns your Hero, **Hero Shop (the only one)** | Economy |
 | **Village House** | Holds 1 villager group (5) and raises the population cap | Economy |
-| Lumber Camp / Quarry / Mine / Hunting Lodge | Drop-off points; villagers nearby gather faster | Economy |
+| **Storehouse** (max 1, Age II) | Second access point for dropping off and picking up. **Destroyed means half the stockpile is lost** | Economy |
+| Lumber Camp / Quarry / Mine / Hunting Lodge | Gather-speed bonus for villagers working nearby (they still carry to an access point) | Economy |
 | **Barracks** | **Infantry** | Military |
 | **Archery Range** | **Archers** | Military |
 | **Stables** | **Riders** | Military |
@@ -105,15 +117,16 @@ In code, FFA is simply "each player is their own team", so supporting both modes
 | Watchtower / Walls | Defence | Defence |
 
 ### Construction (heroes only)
-- From the base panel, the Hero picks a building and places it inside the base zone. A ghost foundation appears.
+- From the base panel, the Hero picks a building and places it inside the base zone. **Watchtowers can be placed anywhere on the map**, for example to hold a lane. A ghost foundation appears.
 - The build timer runs **only while a friendly Hero is within build range (8m)** of the foundation. If the Hero walks away, it pauses (with a progress ring on the foundation) and resumes when a Hero returns.
 - **Speed:** 1 hero = 1×; **2 or more heroes in range (you plus allies) = 1.5×**.
+- **Contested:** if **any enemy Hero** is within build range, progress pauses. Enemies can also attack the foundation; it has HP that grows with progress, and destroying it loses the building and its cost.
 - Cost is paid when placing. Cancelling refunds 75%.
 - Draft times: Village House 0:30, Watchtower 2:00, Barracks 1:30, Archery Range and Stables 1:45, Siege Works 2:30, Special building 3:00, walls 0:20 per segment, Age advance 1:00 (the Hero stands at the Town Center).
 - This makes **building a real tradeoff**: every minute spent building is a minute your Hero isn't fighting, farming or leading squads.
 - open-rts already has `ConstructingWhileInRange.gd` and a structure placement handler. Both are reused, with the Hero as the only constructor.
 
-Each military building has a **Train** button, an **Auto-repeat** toggle, a **lane picker**, and an **upgrade** that raises squad size (for example, Infantry 8 → 10 → 12).
+Each military building has a **Train** button, an **Auto-repeat** toggle, a **lane picker**, a **supply bar** (filled by hauling villagers), and an **upgrade** that raises squad size (for example, Infantry 8 → 10 → 12).
 
 ### Counter table (attacker damage multiplier)
 
@@ -152,9 +165,9 @@ The last two factions need new systems (units that carry others, and flying unit
 
 | # | Milestone | Content | Est. |
 |---|---|---|---|
-| **M1** | **Weekend slice** | Hero loop, squadrons and proximity orders, **villager groups with resource bubbles and respawn delay**, Food/Wood/Stone/Iron/Gold, **hero-only construction (1.5× with 2+ heroes)**, **Ages I–II**, **Barracks, Archery Range and Stables** with auto-repeat, counter table, **AoE-style team picker** (Team and FFA presets), 6-lane map, jungle, 6-item shop, bots, **4 launch factions with 1 hero each** (Aragorn, Théoden, Gothmog, Lurtz). Faction units share stat templates and differ by model and colour. | 2–3 days |
-| **M2** | Full launch factions | **Age III**, **Siege Works and Special buildings** with heavy and special units for the 4 launch factions, Blacksmith upgrades, squad-size upgrades, Houses and population, walls. **The other 8 launch heroes** (12 total). Faction-specific stats, a bigger shop. | 1–2 weeks |
-| **M3** | Multiplayer | LAN/Wi-Fi via Godot ENet, using the Command Bus (see Eng). Host-authoritative. Lobby with mode, faction and bot slots. | 1–2 weeks |
+| **M1** | **Weekend slice (LAN)** | **LAN/Wi-Fi multiplayer** (host + up to 3 players, bots in empty slots), Hero loop, squadrons and proximity orders, villager groups with resource bubbles and Food-cost respawn, **Storehouse, stockpile halving and automatic hauling**, Food/Wood/Stone/Iron, **hero-only construction** (1.5× with allies, paused by enemies, towers anywhere), **Ages I–II**, **Barracks, Archery Range and Stables** with auto-repeat, counter table, AoE-style team picker, 6-lane map, bots, **4 factions**: Aragorn with full QWER; Théoden, Gothmog and Lurtz with basic attack plus 1 ability. Faction units share stat templates and differ by model and colour. | 3 days (tight) |
+| **M2** | Full launch factions | **Jungle camps, Gold and the Town Center shop.** **Full QWER for Théoden, Gothmog and Lurtz.** **Age III**, **Siege Works and Special buildings** with heavy and special units, Blacksmith and squad-size upgrades, walls. **The other 8 launch heroes** (12 total). Faction-specific stats. | 1–2 weeks |
+| **M3** | Online play | Play over the internet, not just LAN (a relay server or port-forwarding guide), reconnecting after a drop, a match browser. | 1 week |
 | **M4** | Eldar + Durin's Folk | 2 factions × (5 unit classes + 3 heroes). Mostly data and models. | 1 week |
 | **M5** | Harad & the East + Guardians of the Wild | Carrier units (Mûmak) and flying units (Eagles, Gwaihir, Witch-king's Fell Beast). Turns the air domain back on. | 1–2 weeks |
 | **M6** | Polish | Audio and music, more maps, bot difficulty levels, balance passes (the installed skills include a Monte Carlo balancer), settings menu. | ongoing |
@@ -170,7 +183,7 @@ The last two factions need new systems (units that carry others, and flying unit
 | 100+ units run on an average laptop | **Unproven.** open-rts gives every unit its own `NavigationAgent3D` and uses the Forward+ renderer | **High.** Benchmark first; path only squad leaders; use the Mobile renderer |
 | Team + FFA on one map | **Validated** in design: FFA is one-player teams | Low |
 | Free LOTR hero models exist | **Partly.** Aragorn, Orc, Uruk-hai and Witch-king exist (CC-BY). There is **no Rohan hero** and no faction troops. | Medium. Troops use low-poly CC0 packs anyway |
-| Multiplayer can be added later | Only if all inputs go through one command layer from day one | **High** without the Command Bus |
+| LAN multiplayer fits in the weekend | **Unproven.** open-rts is single-player only, and syncing 100+ units costs bandwidth | **High.** It's built Friday night, before the gameplay, so every later feature is tested in multiplayer from the start. Fallback: ship single-player plus bots and finish LAN next week |
 
 ### Alternatives
 | Approach | Verdict |
@@ -183,9 +196,9 @@ The last two factions need new systems (units that carry others, and flying unit
 ══════════════════════════════
   CEO REVIEW
 ══════════════════════════════
-Premises: NEEDS VALIDATION (performance, multiplayer readiness)
+Premises: NEEDS VALIDATION (performance, LAN in one weekend)
 Recommended approach: A, fork godot-open-rts
-Scope decision: REDUCED for M1, with the full game laid out as M2–M6
+Scope decision: REDUCED for M1 (jungle, shop and 3 heroes' full kits moved to M2 to make room for LAN)
 ══════════════════════════════
 ```
 
@@ -194,29 +207,40 @@ Scope decision: REDUCED for M1, with the full game laid out as M2–M6
 ## Phase 2: Eng review
 
 ### Architecture decisions
-1. **Command Bus (makes multiplayer possible).** Every intent is a small serialisable `Command`: `HeroMove`, `HeroAttack`, `CastAbility`, `SquadOrder`, `SetAutoRepeat`, `TrainSquad`, `Build`, `AdvanceAge`, `BuyItem`, `AssignVillagers`. Both human input and bots emit commands into one `CommandBus` autoload, and nothing else mutates game state. In M3 the bus forwards commands to the host by RPC.
+1. **Command Bus (makes multiplayer possible).** Every intent is a small serialisable `Command`: `HeroMove`, `HeroAttack`, `CastAbility`, `SquadOrder`, `SetAutoRepeat`, `TrainSquad`, `Build`, `AdvanceAge`, `BuyItem`, `AssignVillagers`. Both human input and bots emit commands into one `CommandBus` autoload, and nothing else mutates game state. Clients send their commands to the host by RPC, and the host is the only machine that runs the simulation.
 2. **Everything is data.** `FactionData`, `HeroData`, `AbilityData`, `UnitData` (class, stats, cost, squad size, building, model), `BuildingData` (age, cost, produces), `ItemData`, and one `CounterTable`. Adding a faction means adding data files and models, plus scripts only for its unique abilities.
 3. **Teams.** `Player.team` (set from the lobby dropdown) with `Utils.is_enemy(a, b)` everywhere. Allies share fog and can co-build.
 4. **Squadron performance.** Only the leader runs a `NavigationAgent3D`; members steer to formation slots. Unit meshes use LOD, and identical idle units can use `MultiMeshInstance3D` later if needed.
 5. **Production.** `ProductionBuilding` holds `unit_data`, `auto_repeat`, `lane` and a 60s timer. Each tick it calls `Economy.try_spend(cost)`, then spawns a squadron that runs `MarchLane(lane)`; otherwise it raises the "Can't afford" signal.
 6. **Renderer and engine.** Use Godot 4.3, and switch Forward+ to Mobile. Upgrading Godot is a separate task.
 7. **Villagers.** `VillageHouse` owns a `VillagerGroup` of 5 units, with `assignment` set to FOOD, WOOD, STONE, IRON or HOME and a respawn queue. Villagers reuse open-rts's `Worker` gather loop (`CollectingResourcesSequentially`). Assignment changes go through the Command Bus (`AssignVillagers`).
-8. **Construction.** `Structure` gets `build_progress` and `build_time`. Every tick it counts friendly heroes within 8m: zero means paused, one means 1×, two or more means 1.5×. This reuses `ConstructingWhileInRange.gd`.
+8. **Construction.** `Structure` gets `build_progress` and `build_time`. Every tick it counts heroes within 8m: any enemy hero, or no friendly hero, means paused; one friendly means 1×; two or more means 1.5×. This reuses `ConstructingWhileInRange.gd`.
+9. **Stockpile and hauling.** `Economy` holds the 5 totals. `Storehouse.on_destroyed` halves each total. `ProductionBuilding` has `supply_needed` and `supply_have`. A `HaulingDispatcher` tags villagers at drop-off with a haul job to the neediest building, deducts the load at pickup, and loses it if the villager dies.
+10. **Networking (LAN, M1).** Godot high-level multiplayer over **ENet**:
+    - **Host-authoritative.** The host runs the whole simulation, including bots. Clients only send commands and display what the host tells them.
+    - **Joining:** the host broadcasts on the LAN over UDP so the lobby lists games automatically. Typing an IP address is the fallback.
+    - **State sync:** a `MultiplayerSynchronizer` per hero (20 updates/s), and per squadron (10/s: leader position plus member HP as packed arrays) rather than one per soldier. Villagers and buildings sync position and HP at 5/s. Clients interpolate between updates so movement looks smooth.
+    - **Spawning:** `MultiplayerSpawner` replicates newly spawned units and buildings.
+    - **Fog:** for the weekend each client hides enemies outside its own vision. It isn't cheat-proof, which is fine for a friendly LAN.
+    - **Budget check:** about 150 units × 10 updates/s × ~24 bytes ≈ 36 KB/s per client, comfortable on home Wi-Fi.
 
 ### Files
 
 **Create (under `source/`):**
 - `CommandBus.gd` and `commands/*.gd`
+- `net/Network.gd` (autoload: host, join, peer-to-player mapping), `net/LanDiscovery.gd` (UDP broadcast), `net/SquadSync.gd` (packed squad state), `main-menu/HostJoin.tscn`
+- `match/economy/Storehouse.gd` and `HaulingDispatcher.gd`
 - `data/` resource scripts: `FactionData`, `HeroData`, `AbilityData`, `UnitData`, `BuildingData`, `ItemData`, `CounterTable`
 - `data/factions/{gondor,rohan,mordor,isengard}/`: `.tres` files for faction, units, buildings and heroes
-- `match/units/Hero.gd` and `.tscn`, and `match/abilities/Ability.gd` plus 16 M1 ability scripts
+- `match/units/Hero.gd` and `.tscn`, and `match/abilities/Ability.gd` plus 7 M1 ability scripts (Aragorn's 4, plus 1 each for Théoden, Gothmog and Lurtz)
 - `match/squads/Squadron.gd` (states: MARCH_LANE, ATTACK, DEFEND, HOLD, RETURN, IDLE)
 - `match/squads/SquadOrderPanel.gd` and `.tscn`
 - `match/production/ProductionBuilding.gd` (auto-repeat, lane, upgrades)
 - `match/economy/Economy.gd` (Food/Wood/Stone/Iron/Gold ledger, population, income per minute) and `Ages.gd`
 - `match/economy/VillageHouse.gd`, `VillagerGroup.gd` and `ResourceBubbleMenu.tscn` (the 5 bubbles)
 - `match/lanes/Lane.gd` (`Path3D` with team endpoints)
-- `match/jungle/CreepCamp.gd`, `match/base/BaseZone.gd`, `match/shop/Shop.gd` and `ShopPanel.tscn`
+- `match/base/BaseZone.gd`
+- M2: `match/jungle/CreepCamp.gd`, `match/shop/Shop.gd` and `ShopPanel.tscn`
 - `match/players/bot/BotPlayer.gd` (hero plus economy brain; it reuses open-rts's `EconomyController` ideas)
 - `match/HeroCamera.gd`
 - `match/maps/MiddleEarth4.tscn`
@@ -226,31 +250,33 @@ Scope decision: REDUCED for M1, with the full game laid out as M2–M6
 **Modify (from open-rts):** `Player.gd` (team, ledger), `Human.gd` and `UnitActionsController.gd` (hero-only input through the Command Bus), the selection handlers (disabled), `AutoAttacking.gd` and the turrets (`is_enemy`, counter table), `FogOfWar.gd` (ally vision), `MatchEndHandler.gd` (Team/FFA win), `Worker.gd` → `Villager.gd` and `CommandCenter.gd` (villager groups, 5 resources, Stone and Iron nodes), `ConstructingWhileInRange.gd` and `StructurePlacementHandler.gd` (hero builds, multi-hero speed-up), `MatchConstants.gd` (move constants into data), and `project.godot` (renderer, inputs, autoloads).
 
 ### M1 steps (in order)
-**Friday night**
+**Friday night: foundation and networking first**
 1. Copy open-rts into the repo (keeping `LICENSE-open-rts`), rename it, and disable the air units. Get it running.
 2. Switch to the Mobile renderer. **Benchmark 150 units** on the laptop.
 3. Add the Command Bus and route the existing orders through it.
+4. **Networking skeleton:** host and join (LAN discovery plus IP fallback), with commands going to the host by RPC and unit state syncing back. **Test:** two copies of the game on one laptop, then two laptops, both seeing the same units move. _Networking goes in before gameplay so every feature after it is built and tested in multiplayer from the start._
 
-**Saturday**
-4. Hero: move, auto-attack, camera follow and free-look, respawn.
-5. Squadrons replace unit selection. Proximity orders (Tab plus 1–4). **Playtest that it's fun**, and change it now if it isn't.
-6. Economy: 5 resources, Village Houses with villager groups, the bubble menu, respawn delay, Age I → II, and `BaseZone` gating.
-6b. Hero-only construction: place, stand in range, timer, pause, 1.5× with 2+ heroes.
-7. `ProductionBuilding` with auto-repeat and lanes for the Barracks, Archery Range and Stables. Apply the counter table.
-8. Ability framework, then Aragorn's QWER, XP and levels.
-9. Import the LOTR hero models (Mixamo, then Godot BoneMap). 3h budget, with KayKit as the fallback.
+**Saturday: the hybrid loop**
+5. Hero: move, auto-attack, camera follow and free-look, respawn. Synced.
+6. Squadrons replace unit selection. Proximity orders (Tab plus 1–4). **Playtest that it's fun**, and change it now if it isn't.
+7. Economy: one stockpile with 5 resources, Village Houses and villager groups, the bubble menu, respawn for 50 Food after 45s, the 10-house cap, `BaseZone` gating.
+8. Storehouse (Age II, max 1, halves the stockpile when destroyed) and automatic hauling to military buildings.
+9. Hero-only construction: place, stand in range, timer, 1.5× with allies, paused by enemy heroes, attackable foundations, towers anywhere. Age I → II.
+10. `ProductionBuilding` with supply bar, auto-repeat and lanes for the Barracks, Archery Range and Stables. Apply the counter table.
 
-**Sunday**
-10. Teams, `is_enemy`, shared fog, last-team-standing win condition, lobby with team dropdowns.
-11. The `MiddleEarth4` map: 4 bases, Town Center with 3 towers plus an outer ring, 6 lanes, jungle and boss camp.
-12. Jungle camps, gold, and a 6-item shop.
-13. Théoden, Gothmog and Lurtz abilities.
-14. Bot players (economy, auto-repeat on lanes, hero farming and pushing, retreating at low HP).
-15. Play full matches in both modes and balance.
+**Sunday: the game**
+11. Teams, `is_enemy`, shared fog, last-team-standing win condition. Lobby with 4 slots (human, bot or open), faction and team dropdowns, and Team/FFA presets.
+12. The `MiddleEarth4` map: 4 bases, Town Center with 3 towers plus an outer ring, 6 lanes, resource nodes (forest, quarry, mine, game animals). The jungle areas are left empty for M2.
+13. Ability framework, Aragorn's full QWER, XP and levels.
+14. Théoden, Gothmog and Lurtz: basic attack plus 1 signature ability each (Ride of the Rohirrim, Warg Pack, Heavy Arrow).
+15. Import the LOTR hero models (Mixamo, then Godot BoneMap). 3h budget, with KayKit as the fallback; Théoden uses the KayKit stand-in.
+16. Bot players (economy, auto-repeat on lanes, hero pushing and retreating at low HP).
+17. **LAN playtest on two laptops** in both Team and FFA, then fix and balance.
 
 ### Tests
-- **Unit (GUT, headless):** gathering rate vs groups assigned, villager respawn delay, Return home stops income, build timer (paused with 0 heroes, 1× with 1, 1.5× with 2), counter multipliers, the economy ledger (no overspending, auto-repeat skips when broke), Age gating, the population cap, `is_enemy` in Team vs FFA, squad state transitions, the respawn curve, XP thresholds, ability cooldown and mana, shop purchases.
+- **Unit (GUT, headless):** Storehouse destroyed halves every resource, squadrons don't train until supply is full, a killed hauler loses its load, a construction paused by an enemy hero, villager respawn costs 50 Food (and waits when broke), the 10-house cap, gathering rate vs groups assigned, villager respawn delay, Return home stops income, build timer (paused with 0 heroes, 1× with 1, 1.5× with 2), counter multipliers, the economy ledger (no overspending, auto-repeat skips when broke), Age gating, the population cap, `is_enemy` in Team vs FFA, squad state transitions, the respawn curve, XP thresholds, ability cooldown and mana.
 - **Smoke:** `godot --headless --quit-after 600` runs a 4-bot match in each mode without script errors. This runs in GitHub Actions CI.
+- **Network:** a headless host plus a headless client on localhost. The client sends a `HeroMove`, and the test checks the host and client agree on the hero's position within 0.5m after 2s.
 - **Performance:** a 150-unit benchmark scene, at least 45 FPS on the target laptop.
 
 ```
@@ -260,10 +286,10 @@ Scope decision: REDUCED for M1, with the full game laid out as M2–M6
 Architecture: SOUND, with 3 concerns
   - No allies in open-rts → is_enemy() + shared fog (step 10)
   - 100+ units on laptops → leader-only pathing, Mobile renderer, benchmark at step 2
-  - Multiplayer retrofit → Command Bus from step 3
-Plan: M1 = 15 steps, ~30 new files, ~12 modified
+  - LAN in one weekend → Command Bus (step 3) and networking (step 4) before any gameplay; sync per squad, not per soldier
+Plan: M1 = 17 steps, ~38 new files, ~12 modified
 Complexity: L (M1); XL overall
-Risk: MEDIUM
+Risk: MEDIUM-HIGH (LAN plus everything else is a full 3 days)
 ══════════════════════════════
 ```
 
@@ -271,7 +297,7 @@ Risk: MEDIUM
 
 ## Phase 3: Design review (UX spec)
 
-**Flow:** Main menu, then Lobby (4 slots, each with You/Bot, faction and a **Team 1–4 dropdown**, plus Team/FFA preset buttons and settings), then Hero pick, then Match, then Results (kills, gold, squads trained, buildings lost), then back to the menu.
+**Flow:** Main menu, then **Host game** or **Join game** (the LAN game list appears automatically, with "Join by IP" as a fallback), then Lobby (4 slots, each open, human or bot, with a faction and a **Team 1–4 dropdown**; only the host can start, plus Team/FFA preset buttons and settings), then Hero pick, then Match, then Results (kills, gold, squads trained, buildings lost), then back to the menu.
 
 | Input | Action |
 |---|---|
@@ -281,18 +307,18 @@ Risk: MEDIUM
 | Tab | Cycle through squadrons within 15m |
 | 1 / 2 / 3 / 4 | Squad: Attack (click) / Defend (click) / Hold / Return home |
 | Left-click a house or villagers | Resource bubbles: Food / Wood / Stone / Iron / Return home (in base or within 15m) |
-| B / P | Build panel / Shop (base only; the shop is at the Town Center) |
+| B | Build panel (base only; Watchtowers can be placed anywhere) |
 
 **HUD:**
 - **Bottom centre:** Hero portrait, HP and mana, XP, QWER cooldowns, 6 item slots.
-- **Top:** Food, Wood, Iron, Gold, population, Age, clock.
+- **Top:** Food, Wood, Stone, Iron, Gold (each with income per minute), population, Age, clock, and a **Storehouse status icon** that flashes when it's under attack.
 - **Bottom right:** minimap with lanes and squad pings.
 - **Bottom left:** squad order panel (visible only when a squad is in range).
 - **Base panel** (while inside the base) has tabs:
   - **Build:** buildings filtered by Age.
-  - **Military:** each production building with Train, Auto-repeat, lane picker, upgrade, and "next squad in 0:42".
+  - **Military:** each production building with Train, Auto-repeat, lane picker, supply bar, upgrade, and "next squad in 0:42".
   - **Age:** advance to the next Age.
-  - **Shop:** hero items.
+  - **Shop:** hero items (M2).
 
 **States:**
 - **No squad nearby:** the order panel is hidden, with the tip "Move closer to a squadron to command it".
@@ -302,14 +328,24 @@ Risk: MEDIUM
 - **Hero dead:** the screen turns greyscale with a respawn countdown, and squad orders are locked.
 - **Auto-repeat can't afford:** the building icon flashes red, and a toast reads "Archery Range skipped: need 40 Wood".
 - **Locked by Age:** the button is greyed out with "Requires Age II".
+- **Building waiting on supply:** the supply bar is amber and reads "Waiting for villagers to deliver 30 Iron".
+- **Storehouse under attack:** an alert and minimap ping read "Storehouse under attack! Losing it halves your stockpile."
+- **Storehouse lost:** a red banner reads "Storehouse destroyed: stockpile halved (−412 Wood …)".
+- **Construction contested:** the label reads "Paused: enemy Hero nearby".
+- **Network:** a player disconnecting shows "Faramir's player disconnected; a bot is taking over". If the host leaves, the match ends for everyone (no host migration on the weekend).
 
 ---
 
-## Open questions (answer when ready; defaults are in **bold**)
-1. **Unit rosters:** change any unit you don't like. They're defaults, not decisions.
-2. **Villagers per house:** **5** per house, and how many houses can you have at most? Default: **10 houses (50 villagers)**.
-3. **Villager respawn delay:** **45s per villager**, free? Or should replacing villagers cost Food?
-4. **Can the enemy stop construction?** For example, an enemy Hero within range pauses it. Default: **no, but enemies can attack the foundation**.
-5. **Building outside the base:** can heroes build Watchtowers in the field (for example, to hold a lane), or only inside the base? Default: **towers anywhere, everything else base-only**.
-6. **Multiplayer before or after M2?** Default: **after** (M3).
-7. **Rohan hero model:** look for a paid or commissioned Théoden model, or keep the KayKit stand-in?
+## Decided (from your answers)
+- Unit rosters for the 4 launch factions: **approved as listed**.
+- **10 houses** maximum (50 villagers).
+- Replacing a villager costs **50 Food** and takes 45s.
+- **Enemy heroes pause construction**, and enemies can destroy foundations.
+- **Towers anywhere**; one Storehouse from Age II that halves the stockpile when destroyed; **villagers haul supplies to military buildings automatically**.
+- **LAN multiplayer this weekend.** The jungle, the shop and 3 heroes' full kits move to M2.
+- Théoden uses the **KayKit stand-in**.
+
+## Open questions (defaults in **bold**; answer whenever)
+1. **Rebuilding the Storehouse:** can you rebuild it right away after losing it, or only after a cooldown? Default: **after a 2-minute cooldown**.
+2. **Player leaves mid-match:** does a bot take over their faction, or are they eliminated? Default: **a bot takes over**.
+3. **Laptop for testing:** what is the weakest laptop it needs to run on (for example, "a 2019 MacBook Air" or "Intel integrated graphics")? This sets the performance target in step 2.
