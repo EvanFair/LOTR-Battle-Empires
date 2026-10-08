@@ -2,7 +2,7 @@ extends Control
 
 
 func _on_play_button_pressed():
-	get_tree().change_scene_to_file("res://source/main-menu/Play.tscn")
+	get_tree().change_scene_to_file("res://source/lotr/menu/Lobby.tscn")
 
 
 func _on_options_button_pressed():

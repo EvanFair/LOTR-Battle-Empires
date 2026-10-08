@@ -1,0 +1,475 @@
+class_name UnitFactory
+## Builds every unit, building and resource node from a plain params Dictionary, so the host
+## and clients can build identical nodes from the same params (used by replication).
+## Geometry is simple low-poly stand-ins until the real LOTR models are imported.
+
+const HighlightScene = preload("res://source/match/units/traits/Highlight.tscn")
+const HealthBarScene = preload("res://source/match/units/traits/HealthBar.tscn")
+const MovementScene = preload("res://source/match/units/traits/Movement.tscn")
+const ObstacleScene = preload("res://source/match/units/traits/MovementObstacle.tscn")
+const TargetabilityScene = preload("res://source/match/units/traits/Targetability.tscn")
+
+const TroopScript = preload("res://source/lotr/units/Troop.gd")
+const VillagerScript = preload("res://source/lotr/units/Villager.gd")
+const HeroScript = preload("res://source/lotr/units/Hero.gd")
+const BuildingScript = preload("res://source/lotr/units/Building.gd")
+const ResourceScript = preload("res://source/lotr/units/ResourceNode.gd")
+
+const SKIN = Color("e0b48c")
+const ORC_SKIN = Color("5d6b3a")
+const URUK_SKIN = Color("4a3a30")
+const STEEL = Color("b8bcc4")
+const WOOD = Color("7a5230")
+const ROOF = Color("8c3b2a")
+const STONE = Color("a39e93")
+
+static var _materials = {}
+
+
+static func create(params: Dictionary) -> Node3D:
+	var node = null
+	match params.kind:
+		"troop":
+			node = _create_troop(params)
+		"villager":
+			node = _create_villager(params)
+		"hero":
+			node = _create_hero(params)
+		"building":
+			node = _create_building(params)
+		"resource":
+			node = _create_resource(params)
+		_:
+			push_error("unknown unit kind %s" % params.kind)
+			return null
+	_claim_ownership(node, node)
+	return node
+
+
+static func _claim_ownership(root, node):
+	# find_child() only sees owned nodes; code-built children have no owner until we set one.
+	# Nodes inside instanced trait scenes keep their own scene as owner.
+	for child in node.get_children():
+		if child.owner == null:
+			child.owner = root
+		_claim_ownership(root, child)
+
+
+# --- units ------------------------------------------------------------------------------------
+static func _create_troop(params):
+	var stats = GameData.troop_stats(params.faction, params["class"])
+	if params.has("summon_name"):
+		stats["name"] = params.summon_name
+	var unit = _new_unit(TroopScript, params, stats)
+	unit.unit_kind = "troop"
+	unit.unit_class = params["class"]
+	unit.target_kind = params["class"] if params["class"] != "special" else "infantry"
+	unit.display_name = stats.name
+	var geometry = _geometry(unit)
+	var skin = _skin_for(params.faction)
+	match params["class"]:
+		"infantry":
+			_humanoid(geometry, params.faction, skin, "sword", 1.0)
+		"archer":
+			_humanoid(geometry, params.faction, skin, "bow", 1.0)
+		"special":
+			_humanoid(geometry, params.faction, skin, "bow", 1.05)
+		"rider":
+			_rider(geometry, params.faction, skin)
+		"heavy":
+			if params.faction in ["mordor", "wild", "harad"]:
+				_troll(geometry, params.faction)
+			else:
+				_siege(geometry)
+	if params.get("ghost", false):
+		_ghostify(geometry)
+	_finish_mobile(unit, stats, 1.6 if params["class"] != "heavy" else 2.4)
+	return unit
+
+
+static func _create_villager(params):
+	var stats = GameData.VILLAGER_STATS.duplicate()
+	var unit = _new_unit(VillagerScript, params, stats)
+	unit.unit_kind = "villager"
+	unit.unit_class = "villager"
+	unit.target_kind = "villager"
+	unit.display_name = "Villager"
+	var geometry = _geometry(unit)
+	_humanoid(geometry, params.faction, _skin_for(params.faction), "tool", 0.85)
+	_finish_mobile(unit, stats, 1.3)
+	return unit
+
+
+static func _create_hero(params):
+	var data = GameData.HEROES[params.hero]
+	var stats = {
+		"hp": data.hp, "damage": data.damage, "interval": data.interval, "range": data.range,
+		"speed": data.speed, "sight": data.sight, "radius": 0.45,
+		"ranged": data.get("ranged", false),
+	}
+	var unit = _new_unit(HeroScript, params, stats)
+	unit.unit_kind = "hero"
+	unit.unit_class = "hero"
+	unit.target_kind = "hero"
+	unit.hero_key = params.hero
+	unit.display_name = data.name
+	var geometry = _geometry(unit)
+	var weapon = "bow" if data.get("ranged", false) else "sword"
+	_humanoid(geometry, data.faction, _skin_for(data.faction), weapon, 1.35)
+	# cape and a gold marker so heroes stand out
+	_part(geometry, _box(Vector3(0.55, 0.9, 0.06)), null, Vector3(0, 1.0, 0.22), true)
+	_part(geometry, _torus(0.18, 0.24), Color("e8c24a"), Vector3(0, 2.45, 0))
+	_finish_mobile(unit, stats, 2.4)
+	unit.add_to_group("heroes")
+	return unit
+
+
+static func _finish_mobile(unit, stats, bar_height):
+	var radius = stats.get("radius", 0.4)
+	_collision(unit, radius, 1.6)
+	var movement = MovementScene.instantiate()
+	movement.name = "Movement"
+	movement.radius = radius
+	movement.speed = stats.get("speed", 2.5)
+	movement.path_desired_distance = 0.5
+	movement.target_desired_distance = 0.4
+	movement.path_height_offset = 0.5
+	movement.path_max_distance = 0.51
+	movement.neighbor_distance = 4.0
+	movement.max_neighbors = 12
+	movement.time_horizon_agents = 1.5
+	unit.add_child(movement)
+	_common_traits(unit, radius + 0.15, bar_height)
+
+
+# --- buildings --------------------------------------------------------------------------------
+static func _create_building(params):
+	var data = GameData.BUILDINGS[params.building]
+	var stats = {"hp": data.hp, "sight": data.sight}
+	if data.has("attack"):
+		stats["damage"] = data.attack.damage
+		stats["interval"] = data.attack.interval
+		stats["range"] = data.attack.range
+		stats["ranged"] = true
+	var unit = _new_unit(BuildingScript, params, stats)
+	unit.unit_kind = "building"
+	unit.unit_class = "building"
+	unit.target_kind = "building"
+	unit.building_key = params.building
+	unit.display_name = data.name
+	unit.armor = 0.2
+	var geometry = _geometry(unit)
+	var faction_color = GameData.FACTIONS[params.get("faction", "gondor")].color
+	var s = data.size
+	match params.building:
+		"town_center":
+			_part(geometry, _box(Vector3(s * 1.6, 1.6, s * 1.6)), STONE, Vector3(0, 0.8, 0))
+			_part(geometry, _prism(Vector3(s * 1.7, 1.2, s * 1.7)), null, Vector3(0, 2.2, 0), true)
+			_part(geometry, _cylinder(0.7, 0.8, 3.6), STONE, Vector3(s * 0.5, 1.8, s * 0.5))
+			_part(geometry, _cone(0.9, 1.2), faction_color, Vector3(s * 0.5, 4.2, s * 0.5))
+		"village_house":
+			_part(geometry, _box(Vector3(s * 1.4, 1.0, s * 1.2)), Color("c8b28a"), Vector3(0, 0.5, 0))
+			_part(geometry, _prism(Vector3(s * 1.5, 0.8, s * 1.3)), ROOF, Vector3(0, 1.4, 0))
+			_part(geometry, _box(Vector3(0.3, 0.3, 0.3)), null, Vector3(s * 0.55, 1.2, 0), true)
+		"watchtower":
+			_part(geometry, _cylinder(0.7, 0.9, 4.0), STONE, Vector3(0, 2.0, 0))
+			_part(geometry, _cylinder(1.0, 0.8, 0.6), STONE, Vector3(0, 4.3, 0))
+			_part(geometry, _cone(1.1, 1.0), null, Vector3(0, 5.1, 0), true)
+		"barracks":
+			_part(geometry, _box(Vector3(s * 1.8, 1.4, s * 1.2)), WOOD, Vector3(0, 0.7, 0))
+			_part(geometry, _prism(Vector3(s * 1.9, 0.9, s * 1.3)), null, Vector3(0, 1.85, 0), true)
+			_banner(geometry, Vector3(s * 0.9, 0, s * 0.6))
+		"archery_range":
+			_part(geometry, _box(Vector3(s * 1.6, 1.2, s * 1.0)), WOOD, Vector3(0, 0.6, -s * 0.2))
+			_part(geometry, _prism(Vector3(s * 1.7, 0.7, s * 1.1)), null, Vector3(0, 1.55, -s * 0.2), true)
+			_part(geometry, _cylinder(0.5, 0.5, 0.08), Color("d64545"), Vector3(0, 0.9, s * 0.7),
+				false, Vector3(PI / 2, 0, 0))
+			_banner(geometry, Vector3(-s * 0.8, 0, s * 0.5))
+		"stables":
+			_part(geometry, _box(Vector3(s * 1.8, 1.1, s * 1.1)), Color("8a6a3a"), Vector3(0, 0.55, 0))
+			_part(geometry, _prism(Vector3(s * 1.9, 0.8, s * 1.2)), null, Vector3(0, 1.5, 0), true)
+			for i in range(4):
+				_part(geometry, _box(Vector3(0.1, 0.6, 0.1)), WOOD,
+					Vector3(-s * 0.8 + i * s * 0.53, 0.3, s * 0.85))
+			_part(geometry, _box(Vector3(s * 1.7, 0.08, 0.08)), WOOD, Vector3(0, 0.5, s * 0.85))
+		"storehouse":
+			_part(geometry, _box(Vector3(s * 1.5, 1.3, s * 1.3)), Color("9c7b4b"), Vector3(0, 0.65, 0))
+			_part(geometry, _prism(Vector3(s * 1.6, 0.8, s * 1.4)), null, Vector3(0, 1.7, 0), true)
+			for i in range(3):
+				_part(geometry, _box(Vector3(0.5, 0.5, 0.5)), WOOD,
+					Vector3(s * 0.9, 0.25, -0.6 + i * 0.6))
+	_collision(unit, s, 2.0)
+	var obstacle = ObstacleScene.instantiate()
+	obstacle.name = "MovementObstacle"
+	obstacle.radius = s
+	obstacle.affect_navigation_mesh = true
+	obstacle.path_height_offset = 0.0
+	var verts = PackedVector3Array()
+	for i in range(8):
+		var angle = TAU * i / 8.0
+		verts.append(Vector3(cos(angle), 0, sin(angle)) * s * 0.9)
+	obstacle.vertices = verts
+	unit.add_child(obstacle)
+	_common_traits(unit, s + 0.3, 3.0 if params.building != "watchtower" else 6.0)
+	return unit
+
+
+# --- resources --------------------------------------------------------------------------------
+static func _create_resource(params):
+	var node = Area3D.new()
+	node.set_script(ResourceScript)
+	node.name = "Resource"
+	node.resource_type = params.type
+	node.amount = params.get("amount", GameData.RESOURCE_NODES[params.type].amount)
+	node.spawn_params = params
+	node.collision_layer = 2
+	node.collision_mask = 0
+	node.add_to_group("resource_units")
+	node.add_to_group("lotr_resources")
+	var geometry = Node3D.new()
+	geometry.name = "Geometry"
+	node.add_child(geometry)
+	var rng = RandomNumberGenerator.new()
+	rng.seed = hash(params.get("seed", 0))
+	match params.type:
+		"wood":
+			for i in range(3):
+				var offset = Vector3(rng.randf_range(-0.6, 0.6), 0, rng.randf_range(-0.6, 0.6))
+				_part(geometry, _cylinder(0.12, 0.15, 1.0), WOOD, offset + Vector3(0, 0.5, 0))
+				_part(geometry, _cone(0.6, 1.6), Color("2f6b2a"), offset + Vector3(0, 1.7, 0))
+		"stone":
+			for i in range(3):
+				var offset = Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5))
+				var size = rng.randf_range(0.5, 0.9)
+				_part(geometry, _box(Vector3(size, size * 0.8, size)), STONE, offset + Vector3(0, size * 0.4, 0),
+					false, Vector3(0, rng.randf() * PI, 0))
+		"iron":
+			_part(geometry, _sphere(0.8), Color("4a4f57"), Vector3(0, 0.35, 0))
+			for i in range(3):
+				var offset = Vector3(rng.randf_range(-0.5, 0.5), 0.6, rng.randf_range(-0.5, 0.5))
+				_part(geometry, _sphere(0.18), Color("b0562a"), offset)
+		"food":
+			for i in range(3):
+				var offset = Vector3(rng.randf_range(-0.7, 0.7), 0, rng.randf_range(-0.7, 0.7))
+				_part(geometry, _capsule(0.18, 0.7), Color("9a6a3e"), offset + Vector3(0, 0.35, 0),
+					false, Vector3(0, 0, PI / 2))
+				_part(geometry, _sphere(0.14), Color("7a4a2a"), offset + Vector3(0.38, 0.45, 0))
+	_collision(node, 0.8, 1.2)
+	var obstacle = ObstacleScene.instantiate()
+	obstacle.name = "MovementObstacle"
+	obstacle.radius = 0.6
+	obstacle.affect_navigation_mesh = true
+	obstacle.path_height_offset = 0.6
+	obstacle.vertices = PackedVector3Array(
+		[Vector3(0, 0, -0.3), Vector3(0.3, 0, 0), Vector3(0, 0, 0.3), Vector3(-0.3, 0, 0)]
+	)
+	node.add_child(obstacle)
+	var highlight = HighlightScene.instantiate()
+	highlight.radius = 1.0
+	highlight.position.y = 0.05
+	node.add_child(highlight)
+	return node
+
+
+# --- assembly helpers -------------------------------------------------------------------------
+static func _new_unit(script, params, stats):
+	var unit = Area3D.new()
+	unit.set_script(script)
+	unit.collision_layer = 2
+	unit.collision_mask = 0
+	unit.spawn_params = params
+	unit.stats = stats
+	return unit
+
+
+static func _geometry(unit):
+	var geometry = Node3D.new()
+	geometry.name = "Geometry"
+	unit.add_child(geometry)
+	return geometry
+
+
+static func _collision(unit, radius, height):
+	var shape = CollisionShape3D.new()
+	shape.name = "CollisionShape3D"
+	var cylinder = CylinderShape3D.new()
+	cylinder.radius = radius
+	cylinder.height = height
+	shape.shape = cylinder
+	shape.position.y = height / 2.0
+	unit.add_child(shape)
+
+
+static func _common_traits(unit, ring_radius, bar_height):
+	var highlight = HighlightScene.instantiate()
+	highlight.name = "Highlight"
+	highlight.radius = ring_radius
+	highlight.position.y = 0.05
+	unit.add_child(highlight)
+	var targetability = TargetabilityScene.instantiate()
+	targetability.name = "Targetability"
+	targetability.radius = ring_radius
+	targetability.position.y = 0.05
+	unit.add_child(targetability)
+	var bar = HealthBarScene.instantiate()
+	bar.name = "HealthBar"
+	bar.position.y = bar_height
+	bar.size = Vector2(120, 10)
+	unit.add_child(bar)
+
+
+static func _skin_for(faction):
+	if faction == "mordor":
+		return ORC_SKIN
+	if faction == "isengard":
+		return URUK_SKIN
+	return SKIN
+
+
+static func _humanoid(geometry, faction, skin, weapon, scale):
+	var armor = GameData.FACTIONS[faction].color
+	var root = Node3D.new()
+	root.scale = Vector3.ONE * scale
+	geometry.add_child(root)
+	_part(root, _capsule(0.22, 1.0), armor, Vector3(0, 0.75, 0))  # body
+	_part(root, _box(Vector3(0.46, 0.25, 0.3)), null, Vector3(0, 0.95, 0), true)  # tabard
+	_part(root, _sphere(0.17), skin, Vector3(0, 1.42, 0))  # head
+	match weapon:
+		"sword":
+			_part(root, _box(Vector3(0.05, 0.7, 0.05)), STEEL, Vector3(0.3, 0.9, -0.25),
+				false, Vector3(-0.5, 0, 0))
+			_part(root, _box(Vector3(0.08, 0.45, 0.35)), null, Vector3(-0.28, 0.85, -0.05), true)
+		"bow":
+			_part(root, _torus(0.3, 0.34), WOOD, Vector3(-0.3, 0.95, -0.1), false,
+				Vector3(0, PI / 2, 0))
+		"spear":
+			_part(root, _cylinder(0.025, 0.025, 1.8), WOOD, Vector3(0.28, 0.9, -0.2))
+		"tool":
+			_part(root, _cylinder(0.025, 0.025, 0.8), WOOD, Vector3(0.28, 0.7, -0.15),
+				false, Vector3(-0.6, 0, 0))
+	return root
+
+
+static func _rider(geometry, faction, skin):
+	var horse_color = Color("6b4a2b") if faction in ["gondor", "rohan"] else Color("3a3a3a")
+	_part(geometry, _box(Vector3(0.45, 0.5, 1.2)), horse_color, Vector3(0, 0.75, 0))
+	_part(geometry, _box(Vector3(0.25, 0.45, 0.35)), horse_color, Vector3(0, 1.1, -0.65),
+		false, Vector3(-0.5, 0, 0))
+	for x in [-0.15, 0.15]:
+		for z in [-0.45, 0.45]:
+			_part(geometry, _cylinder(0.06, 0.06, 0.55), horse_color, Vector3(x, 0.27, z))
+	var rider = _humanoid(geometry, faction, skin, "spear", 0.85)
+	rider.position = Vector3(0, 0.55, 0.05)
+
+
+static func _troll(geometry, faction):
+	var color = Color("6a6a5a") if faction == "mordor" else GameData.FACTIONS[faction].color
+	_part(geometry, _capsule(0.6, 2.2), color, Vector3(0, 1.1, 0))
+	_part(geometry, _sphere(0.38), color, Vector3(0, 2.35, -0.1))
+	_part(geometry, _cylinder(0.12, 0.2, 1.4), WOOD, Vector3(0.65, 1.2, -0.3), false,
+		Vector3(-0.7, 0, 0))
+	_part(geometry, _box(Vector3(0.9, 0.3, 0.6)), null, Vector3(0, 1.6, 0), true)
+
+
+static func _siege(geometry):
+	_part(geometry, _box(Vector3(1.0, 0.4, 1.6)), WOOD, Vector3(0, 0.5, 0))
+	for x in [-0.55, 0.55]:
+		for z in [-0.55, 0.55]:
+			_part(geometry, _cylinder(0.3, 0.3, 0.12), WOOD, Vector3(x, 0.3, z), false,
+				Vector3(0, 0, PI / 2))
+	_part(geometry, _box(Vector3(0.12, 0.12, 2.0)), WOOD, Vector3(0, 1.2, 0), false,
+		Vector3(0.6, 0, 0))
+	_part(geometry, _box(Vector3(0.6, 0.3, 0.3)), null, Vector3(0, 0.85, 0.6), true)
+
+
+static func _banner(geometry, at):
+	_part(geometry, _cylinder(0.04, 0.04, 2.6), WOOD, at + Vector3(0, 1.3, 0))
+	_part(geometry, _box(Vector3(0.6, 0.4, 0.03)), null, at + Vector3(0.3, 2.3, 0), true)
+
+
+static func _ghostify(geometry):
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.6, 1.0, 0.8, 0.45)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.emission_enabled = true
+	mat.emission = Color(0.3, 0.9, 0.6)
+	for node in geometry.find_children("*", "MeshInstance3D", true, false):
+		node.material_override = mat
+		node.remove_meta("team_color")
+
+
+static func _part(parent, mesh, color, position, team_color = false, rotation = Vector3.ZERO):
+	var instance = MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.position = position
+	instance.rotation = rotation
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if team_color or color == null:
+		instance.set_meta("team_color", true)
+		instance.material_override = _material(Color.WHITE)
+	else:
+		instance.material_override = _material(color)
+	parent.add_child(instance)
+	return instance
+
+
+static func _material(color: Color):
+	var key = color.to_html()
+	if not _materials.has(key):
+		var mat = StandardMaterial3D.new()
+		mat.albedo_color = color
+		mat.roughness = 0.85
+		_materials[key] = mat
+	return _materials[key]
+
+
+static func _box(size):
+	var mesh = BoxMesh.new()
+	mesh.size = size
+	return mesh
+
+
+static func _prism(size):
+	var mesh = PrismMesh.new()
+	mesh.size = size
+	return mesh
+
+
+static func _capsule(radius, height):
+	var mesh = CapsuleMesh.new()
+	mesh.radius = radius
+	mesh.height = height
+	mesh.radial_segments = 8
+	mesh.rings = 3
+	return mesh
+
+
+static func _sphere(radius):
+	var mesh = SphereMesh.new()
+	mesh.radius = radius
+	mesh.height = radius * 2
+	mesh.radial_segments = 8
+	mesh.rings = 4
+	return mesh
+
+
+static func _cylinder(top, bottom, height):
+	var mesh = CylinderMesh.new()
+	mesh.top_radius = top
+	mesh.bottom_radius = bottom
+	mesh.height = height
+	mesh.radial_segments = 8
+	return mesh
+
+
+static func _cone(radius, height):
+	return _cylinder(0.0, radius, height)
+
+
+static func _torus(inner, outer):
+	var mesh = TorusMesh.new()
+	mesh.inner_radius = inner
+	mesh.outer_radius = outer
+	mesh.rings = 8
+	mesh.ring_segments = 4
+	return mesh
