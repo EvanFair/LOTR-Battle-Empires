@@ -1,198 +1,236 @@
 # LOTR Battle Empires: Build Plan
 
-_Produced with the gstack-autoplan pipeline (CEO, then Eng, then Design review), 2026-10-08._
+_Produced with the gstack-autoplan pipeline (CEO, then Eng, then Design review). Revision 2, 2026-10-08: adds game modes, unit classes, production buildings, counters, and all 8 factions._
 
 ## Executive summary
 
-LOTR Battle Empires is a 4-faction, 2v2 game played on a single map. Each player controls **only their Hero**, Dota-style. The army is **squadrons** that you command by standing near them, while the economy runs itself and you build only inside your own base.
-We fork **lampe-games/godot-open-rts** (MIT, Godot 4.3, 3D). It already has the economy, construction, pathfinding, fog of war, minimap and AI. On top of it we add the Hero, squadrons, lanes, a jungle and a shop.
-**This weekend's target is a vertical slice:** 4 factions, 1 hero each, one map, bots, single-player. Multiplayer and the full 24-hero roster come after.
+LOTR Battle Empires is a 4-player Lord of the Rings game with **Team (2v2)** and **Free-for-All** modes. Each player controls **only their Hero**, Dota-style. You collect resources and pay for buildings and troops like Age of Empires. The troops fight as **squadrons** that march down lanes, and you command them in person by standing near them.
+We fork **lampe-games/godot-open-rts** (MIT, Godot 4.3, 3D), which already has the economy, construction, pathfinding, fog of war, minimap and AI.
+Milestone 1 (the weekend) is a playable slice with 4 factions and 3 unit classes. Six more milestones take it to 8 factions, 5 unit classes each, 24 heroes, and LAN multiplayer.
 
 ---
 
-## Your design decisions (from the questionnaire)
+## Design decisions (from you)
 
-| # | Decision |
+| Area | Decision |
 |---|---|
-| Control | You control **only the Hero**. Right-click moves and attacks (Dota). You can build and shop **only inside your base**. You can order troops only when the Hero is **near** them. |
-| Camera | Locked to the Hero by default (MOBA). Release it to look around freely. |
-| Economy | Workers **auto-spawn and auto-gather** wood, stone (mine) and meat (hunting). **Gold** comes from killing jungle creatures and enemies. |
-| Army | **Squadrons**, not individual units. Orders: Attack this, Defend this, Hold position, Return home (regen). Squad size grows over time and with upgrades. |
-| Waves | Attack units unlock after a criterion is met. Once you **activate a lane**, that lane's barracks spawn a squadron **every 60s**. |
-| Base | Town Center plus 3 guard towers, with an outer ring of towers. You can build anywhere inside your base. |
-| Heroes | QWER abilities, levels and XP, and a LoL-style respawn timer. 8 factions × 3 heroes are designed (24 total). |
-| Units | Units don't level up. Barracks upgrades unlock better troops. |
-| Shop | Yes, simpler than LoL's. |
-| Map | Open map with lanes. 4+ teams. Each base has 1 route to its ally and 2 lanes to the two enemies. Neutral jungle monsters. Fog of war. |
-| Match | About 30 minutes. 100+ units on screen. Win by destroying the enemy teams. |
-| Multiplayer | LAN/Wi-Fi plus bots (later). |
-| Graphics | Must run on any laptop: low-poly, Age of Empires-style troops and buildings, with more detail on heroes. |
-| Collision | Unit collision is a toggle in settings. |
-| Models | Real LOTR models from day one (for heroes; troops use low-poly packs, per the graphics decision). |
+| **Modes** | **Team** (2v2) and **FFA** (4-way), selectable in the lobby. Both use the same map. |
+| **Control** | You control **only the Hero**. Right-click moves and attacks (Dota). You build, train and shop **only inside your base**. You order squadrons only when the Hero is **near** them. |
+| **Camera** | Locked to the Hero by default. Release it to look around freely. |
+| **Economy** | Workers auto-spawn and auto-gather **Food** (hunting and farms), **Wood** and **Iron** (mines). **Gold** comes from killing jungle creatures, enemy units and heroes. You pay for every building and squadron, AoE-style. |
+| **Production** | **Each unit class has its own building.** Every building can train a squadron once (manual) or be set to **Auto-repeat**: choose a lane, and it trains 1 squadron every 60s, paid automatically. If you can't afford it, that cycle is skipped with a warning. |
+| **New squadrons** | **March their assigned lane** and fight until the Hero gives them a new order nearby. |
+| **Squadrons** | **One unit type each** (for example, 8 Gondor Archers). Orders: Attack this, Defend this, Hold position, Return home (regen). |
+| **Counters** | **AoE-style** damage multipliers (table below). |
+| **Unit progression** | Units don't level up. Upgrades at buildings make **newly trained** squads stronger or bigger. |
+| **Heroes** | QWER abilities, XP and levels, a LoL-style respawn timer, and items from a shop. 3 heroes per faction, 24 in total. |
+| **Base** | Town Center with 3 guard towers, plus an outer ring of towers. You can build anywhere inside your base zone. |
+| **Map** | Lanes, a jungle with neutral monsters, and fog of war. |
+| **Win** | Destroy the enemy team's Town Centers (Team mode), or be the last player standing (FFA). |
+| **Match / scale** | About 30 minutes. 100+ units. Must run on an average laptop. Troops are AoE-style low-poly; heroes are more detailed. |
+| **Multiplayer** | LAN/Wi-Fi plus bots (Milestone 3). |
+| **Settings** | Unit collision on/off, mode, bot difficulty, starting resources. |
 
 ---
 
-## Phase 1: CEO review (strategy and scope)
+## Game modes and map
+
+One square map with 4 corner bases. There are **6 lanes**: the 4 edges and 2 diagonals that cross at a central boss camp. Jungle camps sit in the four quadrants.
+
+```
+ Gondor ●━━━━━━━━━ north lane ━━━━━━━━━● Mordor
+   ┃  ╲     jungle        jungle    ╱  ┃
+ west  ╲          ╲      ╱         ╱  east
+ lane   diagonal    ╲  ╱  boss    diagonal lane
+   ┃     ╱          ╱  ╲  camp     ╲   ┃
+   ┃  ╱     jungle        jungle    ╲  ┃
+ Rohan ●━━━━━━━━━ south lane ━━━━━━━━━● Isengard
+```
+
+| | **Team mode (2v2)** | **FFA mode** |
+|---|---|---|
+| Teams | Gondor + Rohan vs Mordor + Isengard by default (any pairing is allowed in the lobby) | Everyone for themselves |
+| Edge to your neighbour | An **ally route**: safe, so you can reinforce and share vision | A contested lane |
+| Lanes to enemies | 2 per base (straight + diagonal) | 3 per base (2 edges + 1 diagonal) |
+| Vision | Shared with your ally | Your own only |
+| Win | Both enemy Town Centers destroyed | Last player standing |
+
+In code, FFA is simply "each player is their own team", so supporting both modes costs almost nothing once teams exist.
+
+---
+
+## Economy, Ages and buildings
+
+**Resources:** Food, Wood, Iron and Gold. Workers auto-gather Food, Wood and Iron. Gold comes from kills and the jungle.
+
+**Ages are the "criteria" that unlock attack units, as in AoE.** You advance an Age at the Town Center by paying resources:
+
+| Age | Unlocks | Advance cost (draft) |
+|---|---|---|
+| **I: Settlement** (start) | Town Center, Houses, Lumber Camp, Mine, Hunting Lodge/Farm, Watchtower, **Barracks** | — |
+| **II: Kingdom** | **Archery Range**, **Stables**, Blacksmith (upgrades), stone walls | 400 Food, 200 Wood |
+| **III: Empire** | **Siege Works** (heavy units), the faction's **Special building**, Tier-3 upgrades, bigger squads | 800 Food, 400 Iron, 200 Gold |
+
+| Building | Trains / does | Class |
+|---|---|---|
+| Town Center | Workers (auto, up to a cap), advances Ages, respawns your Hero, **Shop** | Economy |
+| House | +Population cap (squads cost population) | Economy |
+| Lumber Camp / Mine / Hunting Lodge | Drop-off points; nearby workers gather faster | Economy |
+| **Barracks** | **Infantry** | Military |
+| **Archery Range** | **Archers** | Military |
+| **Stables** | **Riders** | Military |
+| **Siege Works** | **Heavy** units | Military |
+| **Special building** (one per faction) | **Special** unit | Military |
+| Blacksmith | +Attack/+Armour upgrades for all newly trained squads | Upgrade |
+| Watchtower / Walls | Defence | Defence |
+
+Each military building has a **Train** button, an **Auto-repeat** toggle, a **lane picker**, and an **upgrade** that raises squad size (for example, Infantry 8 → 10 → 12).
+
+### Counter table (attacker damage multiplier)
+
+| Attacker ↓ \ Target → | Infantry | Archers | Riders | Heavy | Buildings |
+|---|---|---|---|---|---|
+| **Infantry** (spears/swords) | 1.0 | 1.2 | **1.75** | 0.75 | 0.5 |
+| **Archers** | **1.5** | 1.0 | 0.6 | 0.5 | 0.25 |
+| **Riders** | 1.0 | **1.75** | 1.0 | 0.6 | 0.5 |
+| **Heavy** (trolls/siege) | 1.25 | 0.75 | 1.0 | 1.0 | **3.0** |
+| **Special** | per unit | per unit | per unit | per unit | per unit |
+
+Heroes take 1.0 from everything, and abilities ignore the table. All values live in one data file so balancing is a data change.
+
+---
+
+## The 8 factions
+
+**Launch factions** (Milestones 1–2) are listed first. Heroes come from your roster; units are the default proposal, so change any of them.
+
+| Faction | Infantry (Barracks) | Archers (Range) | Riders (Stables) | Heavy (Siege Works) | Special (building → unit) | Heroes |
+|---|---|---|---|---|---|---|
+| 🏰 **Gondor** | Gondor Soldiers | Gondor Archers | Knights of Dol Amroth | Trebuchet | Ranger Hideout → **Rangers of Ithilien** (camouflaged archers) | Boromir, Aragorn, Faramir |
+| 🐴 **Rohan** | Rohan Spearmen | Westfold Bowmen | **Rohirrim** (best riders) | Royal Guard (armoured heavy cavalry) | Meduseld → **Horse Archers** (shoot while moving) | Théoden, Éomer, Éowyn |
+| 🌋 **Mordor** | Orc Warriors (cheap, many) | Orc Archers | Warg Riders | Mountain Trolls | Black Gate Forge → **Grond** (giant ram that wrecks gates) | Gothmog, Witch-king, Shelob |
+| ⚒️ **Isengard** | Uruk-hai Pikemen | Uruk Crossbowmen | Wolf Riders | Battering Ram | Orthanc Furnace → **Uruk Berserker Sappers** (Fire of Orthanc bombs) | Uglúk, Saruman, Lurtz |
+| 🧝 **Eldar** | Lórien Swordsmen | **Galadhrim Archers** (longest range) | Rivendell Lancers | Rivendell Guard (high armour) | Mallorn Grove → **Lórien Wardens** (invisible in trees) | Elrond, Galadriel, Legolas |
+| ⛏️ **Durin's Folk** | Iron Hills Axemen | Dwarven Crossbowmen | Iron Hills Boar Riders | Dwarven Catapult | Great Forge → **Iron Guard Phalanx** (immovable, reflects arrows) | Dáin, Thorin, Gimli |
+| 🐘 **Harad & the East** | Easterling Spearmen | Haradrim Archers | Easterling Cavalry | **Mûmak** (carries archers) | Umbar Docks → **Corsairs of Umbar** (fast raiders) | Mahûd Chieftain, Khamûl, Suladân |
+| 🌲 **Guardians of the Wild** | Beorning Woodmen | Woodman Archers | Great Bears | **Ents** (siege) | Eyrie → **Great Eagles** (flying) | Treebeard, Beorn, Gwaihir |
+
+The last two factions need new systems (units that carry others, and flying units), so they come last. open-rts already has **air navigation**, so it is **kept but disabled** in Milestone 1 rather than deleted.
+
+---
+
+## Milestones
+
+| # | Milestone | Content | Est. |
+|---|---|---|---|
+| **M1** | **Weekend slice** | Hero loop, squadrons and proximity orders, auto-workers, Food/Wood/Iron/Gold, **Ages I–II**, **Barracks, Archery Range and Stables** with auto-repeat, counter table, Team **and** FFA, 6-lane map, jungle, 6-item shop, bots, **4 launch factions with 1 hero each** (Aragorn, Théoden, Gothmog, Lurtz). Faction units share stat templates and differ by model and colour. | 2–3 days |
+| **M2** | Full launch factions | **Age III**, **Siege Works and Special buildings** with heavy and special units for the 4 launch factions, Blacksmith upgrades, squad-size upgrades, Houses and population, walls. **The other 8 launch heroes** (12 total). Faction-specific stats, a bigger shop. | 1–2 weeks |
+| **M3** | Multiplayer | LAN/Wi-Fi via Godot ENet, using the Command Bus (see Eng). Host-authoritative. Lobby with mode, faction and bot slots. | 1–2 weeks |
+| **M4** | Eldar + Durin's Folk | 2 factions × (5 unit classes + 3 heroes). Mostly data and models. | 1 week |
+| **M5** | Harad & the East + Guardians of the Wild | Carrier units (Mûmak) and flying units (Eagles, Gwaihir, Witch-king's Fell Beast). Turns the air domain back on. | 1–2 weeks |
+| **M6** | Polish | Audio and music, more maps, bot difficulty levels, balance passes (the installed skills include a Monte Carlo balancer), settings menu. | ongoing |
+
+---
+
+## Phase 1: CEO review
 
 ### Premises
-
 | Premise | Status | Risk if wrong |
 |---|---|---|
-| open-rts can be bent into a hero-centric game | **Validated.** I read its code: orders go through an `Action` system (`Moving`, `Following`, `AutoAttacking`), and `Utils.Match.Unit.Movement.crowd_moved_to_new_pivot` already does formation moves. A Hero is a new `Unit` subclass. | Low |
-| 100+ units run on a weak laptop | **Needs validation.** open-rts gives every unit its own `NavigationAgent3D` and uses the Forward+ renderer. | High: we may need to switch renderer and path only squad leaders |
-| Free LOTR hero models are usable | **Partly validated.** Free CC-BY models exist for Aragorn, Orc, Uruk-hai and Witch-king. **None was found for Théoden or any Rohan hero.** Sketchfab models usually come unrigged, so they need Mixamo. | Medium: rigging costs 1–2 hours per hero |
-| 4 teams fit open-rts | **Needs work.** open-rts treats every other player as an enemy. It has **no concept of allies**. | Medium: touches targeting, fog of war and win checks |
-| Multiplayer can be added later | **Needs care.** open-rts is single-player only. Retrofitting networking is the most expensive change in this whole plan. | High, unless every input goes through one command layer from day one (see Eng) |
+| open-rts can be bent into a hero-centric game | **Validated** by reading its code: there's an `Action` system (`Moving`, `Following`, `AutoAttacking`), formation moves exist, and production queues and construction already work | Low |
+| 100+ units run on an average laptop | **Unproven.** open-rts gives every unit its own `NavigationAgent3D` and uses the Forward+ renderer | **High.** Benchmark first; path only squad leaders; use the Mobile renderer |
+| Team + FFA on one map | **Validated** in design: FFA is one-player teams | Low |
+| Free LOTR hero models exist | **Partly.** Aragorn, Orc, Uruk-hai and Witch-king exist (CC-BY). There is **no Rohan hero** and no faction troops. | Medium. Troops use low-poly CC0 packs anyway |
+| Multiplayer can be added later | Only if all inputs go through one command layer from day one | **High** without the Command Bus |
 
-### Problem framing
-- The real goal this weekend is to **feel the hybrid loop**: walk your Hero to a squadron, order it into a lane, fight beside it, recall, build, and push. Everything that doesn't serve that loop waits.
-- **Riskiest assumption:** proximity command is fun and not annoying. Prove it on Saturday before building content.
-- **The simpler 80% version:** 1 hero per faction, 3 squad types, 1 map, bots, no multiplayer.
-
-### Alternatives considered
-
-| Approach | Tradeoffs | Verdict |
-|---|---|---|
-| **A. Fork open-rts and add Hero, Squadrons and Lanes** | Economy, construction, fog, minimap, AI and nav already work. We have to retrofit allies and hero-only input. | ✅ **Chosen** |
-| B. Start from an empty Godot project and copy in the gd-agentic-skills scripts | Clean architecture, but everything (economy, fog, AI, minimap) gets rebuilt. That's 3–4 weekends. | ❌ |
-| C. Port Shotcaller (a real MOBA/RTS hybrid) | Its design is closest, but it's **2D** and **non-commercial** licensed. | ❌ Use for ideas only |
-
-### Scope decisions
-
-| Item | Weekend | Why |
-|---|---|---|
-| Hero: click-to-move, auto-attack, QWER, XP/levels, respawn | **IN** | Core |
-| MOBA camera with free-look toggle | **IN** | Core, and small |
-| Squadrons plus 4 proximity orders | **IN** | Core: it's the riskiest mechanic |
-| Auto-spawning, auto-gathering workers (wood, stone, meat) | **IN** | Mostly exists in open-rts |
-| Lane activation and barracks waves every 60s | **IN** | Core MOBA pressure |
-| Building and shopping only inside your base | **IN** | Small: an `Area3D` gate |
-| 2v2 map with 4 bases, ally route and lanes | **IN** | Needed for 4 teams |
-| Allies (team field) | **IN** | Required for 2v2 |
-| 4 heroes (one per faction) | **IN** | Vertical slice |
-| Jungle camps with gold | **IN** (1 camp type) | Cheap, and gold drives the shop |
-| Shop with about 6 items | **IN** | User calls it "a lot of fun" |
-| Bot heroes (simple) | **IN** | You need someone to fight |
-| Town Center with 3 towers plus an outer ring | **IN** | Placed in the map, not built |
-| Collision on/off setting | **IN** | Very small |
-| Barracks upgrade tiers | DEFER | After the core loop |
-| The other 20 heroes | DEFER | Data-driven, so each is cheap once the system exists |
-| LAN/Wi-Fi multiplayer | DEFER | Large. The architecture is designed for it now (Command Bus) |
-| Flying heroes (Witch-king, Gwaihir), map-wide ults, mind control | DEFER | Need special systems |
-| More than 4 teams / free-for-all | DEFER | |
-| Voice and music | DEFER | |
+### Alternatives
+| Approach | Verdict |
+|---|---|
+| **A. Fork open-rts and add Hero, Squadrons, Lanes and Ages** | ✅ About 60% of the systems already exist (MIT, 3D, same engine) |
+| B. Start from scratch with the gd-agentic-skills scripts | ❌ Rebuilds economy, fog, AI and minimap: 3–4 extra weekends |
+| C. Port Shotcaller | ❌ 2D and non-commercial. Use for ideas only |
 
 ```
 ══════════════════════════════
   CEO REVIEW
 ══════════════════════════════
-Premises: NEEDS VALIDATION (2 of 5)
-  - Low-spec performance at 100+ units: unproven. Benchmark on Saturday morning.
-  - Multiplayer later: only safe if the Command Bus exists from day one.
-
+Premises: NEEDS VALIDATION (performance, multiplayer readiness)
 Recommended approach: A, fork godot-open-rts
-  Why: about 60% of the systems already exist under MIT, in 3D, on the same engine.
-
-Deferred to TODOS: barracks tiers, 20 more heroes, multiplayer,
-  flying/global abilities, FFA/6+ teams, audio.
-
-Scope decision: REDUCED (weekend = vertical slice)
+Scope decision: REDUCED for M1, with the full game laid out as M2–M6
 ══════════════════════════════
 ```
 
 ---
 
-## Phase 2: Eng review (architecture)
+## Phase 2: Eng review
 
-### Key architecture decisions
+### Architecture decisions
+1. **Command Bus (makes multiplayer possible).** Every intent is a small serialisable `Command`: `HeroMove`, `HeroAttack`, `CastAbility`, `SquadOrder`, `SetAutoRepeat`, `TrainSquad`, `Build`, `AdvanceAge`, `BuyItem`. Both human input and bots emit commands into one `CommandBus` autoload, and nothing else mutates game state. In M3 the bus forwards commands to the host by RPC.
+2. **Everything is data.** `FactionData`, `HeroData`, `AbilityData`, `UnitData` (class, stats, cost, squad size, building, model), `BuildingData` (age, cost, produces), `ItemData`, and one `CounterTable`. Adding a faction means adding data files and models, plus scripts only for its unique abilities.
+3. **Teams.** `Player.team` with `Utils.is_enemy(a, b)` everywhere. FFA gives each player a unique team. Allies share fog.
+4. **Squadron performance.** Only the leader runs a `NavigationAgent3D`; members steer to formation slots. Unit meshes use LOD, and identical idle units can use `MultiMeshInstance3D` later if needed.
+5. **Production.** `ProductionBuilding` holds `unit_data`, `auto_repeat`, `lane` and a 60s timer. Each tick it calls `Economy.try_spend(cost)`, then spawns a squadron that runs `MarchLane(lane)`; otherwise it raises the "Can't afford" signal.
+6. **Renderer and engine.** Use Godot 4.3, and switch Forward+ to Mobile. Upgrading Godot is a separate task.
 
-1. **Command Bus (the multiplayer insurance).** Every player intent is a small serialisable `Command` (`HeroMove`, `HeroAttack`, `CastAbility`, `SquadOrder`, `ActivateLane`, `Build`, `BuyItem`) sent through one `CommandBus` autoload. Human input and bot AI **both** emit commands, and nothing else changes game state directly. For LAN later, the bus forwards commands to the host by RPC, and the rest of the game is untouched.
-2. **Data-driven heroes.** `HeroData.tres` holds the stats, model and 4 `AbilityData` entries. Each ability is a small script extending `Ability.gd` (`can_cast()`, `cast(target)`). Adding hero #5 to #24 is then a data file plus 4 small scripts.
-3. **Teams.** Add `team: int` to `Player`. Replace every "is enemy" check in open-rts with `Utils.is_enemy(a, b)`, which compares teams. Allies share vision in `FogOfWar`.
-4. **Squadrons for performance.** Only the squad **leader** runs a `NavigationAgent3D`. Members steer to formation slots around the leader. This cuts pathfinding cost about 8x, which is what makes 100+ units possible on laptops.
-5. **Renderer.** Switch from Forward+ to **Mobile** (or Compatibility if needed) for weak laptops. Verify that the fog-of-war shader still works.
-6. **Engine version.** Stay on **Godot 4.3**, which open-rts targets, for the weekend. Upgrade later as its own task.
+### Files
 
-### Data model (Resources, no database)
-- `HeroData`: name, faction, class, base stats, stat gain per level, model scene, `abilities[4]`, respawn curve
-- `AbilityData`: key (Q/W/E/R), cooldown, mana cost, range, targeting (self/unit/point/area), script
-- `SquadData`: unit scene, size (grows over time), stats, cost
-- `ItemData`: cost, stat modifiers
-- `FactionData`: colour, heroes, squad types, building skins
-- Lane: a `Path3D` per lane on the map, tagged with `from_team` and `to_team`
+**Create (under `source/`):**
+- `CommandBus.gd` and `commands/*.gd`
+- `data/` resource scripts: `FactionData`, `HeroData`, `AbilityData`, `UnitData`, `BuildingData`, `ItemData`, `CounterTable`
+- `data/factions/{gondor,rohan,mordor,isengard}/`: `.tres` files for faction, units, buildings and heroes
+- `match/units/Hero.gd` and `.tscn`, and `match/abilities/Ability.gd` plus 16 M1 ability scripts
+- `match/squads/Squadron.gd` (states: MARCH_LANE, ATTACK, DEFEND, HOLD, RETURN, IDLE)
+- `match/squads/SquadOrderPanel.gd` and `.tscn`
+- `match/production/ProductionBuilding.gd` (auto-repeat, lane, upgrades)
+- `match/economy/Economy.gd` (Food/Wood/Iron/Gold ledger, population) and `Ages.gd`
+- `match/lanes/Lane.gd` (`Path3D` with team endpoints)
+- `match/jungle/CreepCamp.gd`, `match/base/BaseZone.gd`, `match/shop/Shop.gd` and `ShopPanel.tscn`
+- `match/players/bot/BotPlayer.gd` (hero plus economy brain; it reuses open-rts's `EconomyController` ideas)
+- `match/HeroCamera.gd`
+- `match/maps/MiddleEarth4.tscn`
+- `main-menu/Lobby.tscn` (mode, factions, teams, bots, settings)
+- `tests/unit/*.gd` (GUT)
 
-### Implementation plan
+**Modify (from open-rts):** `Player.gd` (team, ledger), `Human.gd` and `UnitActionsController.gd` (hero-only input through the Command Bus), the selection handlers (disabled), `AutoAttacking.gd` and the turrets (`is_enemy`, counter table), `FogOfWar.gd` (ally vision), `MatchEndHandler.gd` (Team/FFA win), `Worker.gd` and `CommandCenter.gd` (auto-spawn, auto-gather, 3 resources), `MatchConstants.gd` (move constants into data), and `project.godot` (renderer, inputs, autoloads).
 
-#### Files to create (all under `source/`)
-- `CommandBus.gd` (autoload): the command queue and dispatch. This is where networking hooks in later.
-- `commands/*.gd`: `HeroMove`, `HeroAttack`, `CastAbility`, `SquadOrder`, `ActivateLane`, `Build`, `BuyItem`
-- `match/units/Hero.gd` and `Hero.tscn`: the `Unit` subclass with XP, level, mana, inventory and respawn
-- `match/abilities/Ability.gd`, plus `aragorn/*.gd`, `theoden/*.gd`, `gothmog/*.gd`, `lurtz/*.gd` (16 abilities)
-- `match/squads/Squadron.gd`: leader, formation, state machine (IDLE, ATTACK, DEFEND, HOLD, RETURN)
-- `match/squads/SquadOrderPanel.gd` and `.tscn`: the contextual HUD for squads in range
-- `match/lanes/LaneManager.gd`: lane activation and 60s wave timer per barracks
-- `match/jungle/CreepCamp.gd`: respawning neutral camp that drops gold and XP
-- `match/base/BaseZone.gd`: `Area3D` that enables the build and shop panels only while the Hero is inside
-- `match/shop/Shop.gd` and `ShopPanel.tscn`
-- `match/players/bot/BotHero.gd`: a simple bot that farms, pushes its lane, retreats at low HP, orders nearby squads and buys items
-- `match/HeroCamera.gd`: extends `IsometricCamera3D` with follow and free-look modes
-- `match/maps/MiddleEarth2v2.tscn`: 4 corner bases, ally routes, lanes and jungle
-- `data/heroes/*.tres`, `data/items/*.tres`, `data/factions/*.tres`
-- `tests/`: GUT unit tests (see below)
+### M1 steps (in order)
+**Friday night**
+1. Copy open-rts into the repo (keeping `LICENSE-open-rts`), rename it, and disable the air units. Get it running.
+2. Switch to the Mobile renderer. **Benchmark 150 units** on the laptop.
+3. Add the Command Bus and route the existing orders through it.
 
-#### Files to modify (from open-rts)
-- `match/players/Player.gd`: add `team`, `gold`, `wood`, `stone`, `meat`
-- `match/players/human/Human.gd`, `UnitActionsController.gd`: remove box-select and per-unit orders; right-click goes to `CommandBus` as a hero command
-- `match/handlers/*SelectionHandler.gd`: disable them, since there's no unit selection in hero-only mode
-- `match/units/actions/AutoAttacking.gd` and turret targeting: use `Utils.is_enemy()`
-- `match/FogOfWar.gd`: shared vision between allies
-- `match/handlers/MatchEndHandler.gd`: a team loses when all its Town Centers are gone
-- `match/units/Worker.gd` and `CommandCenter.gd`: auto-spawn workers up to a cap and auto-assign them to the nearest resource type with the lowest stock
-- `MatchConstants.gd`: 3 resources plus gold; rename units (Tank → Soldier and so on)
-- `project.godot`: renderer, input map (QWER, camera toggle, squad hotkeys), autoloads
-- Remove air units: `Drone`, `Helicopter`, `AircraftFactory`, `AntiAirTurret`, `AirNavigation`
+**Saturday**
+4. Hero: move, auto-attack, camera follow and free-look, respawn.
+5. Squadrons replace unit selection. Proximity orders (Tab plus 1–4). **Playtest that it's fun**, and change it now if it isn't.
+6. Economy: 4 resources, auto-workers, Age I → II, and `BaseZone` gating.
+7. `ProductionBuilding` with auto-repeat and lanes for the Barracks, Archery Range and Stables. Apply the counter table.
+8. Ability framework, then Aragorn's QWER, XP and levels.
+9. Import the LOTR hero models (Mixamo, then Godot BoneMap). 3h budget, with KayKit as the fallback.
 
-#### Steps (in order)
-**Friday night: foundation (2–3h)**
-1. Copy open-rts into the repo root and keep its MIT `LICENSE` as `LICENSE-open-rts`. Rename the project. Delete the air units. Get it running. _We need a known-good base before changing anything._
-2. Switch the renderer. **Benchmark** 150 Tanks on `BigArena` on the laptop. _This validates the riskiest premise first._
-3. Add `CommandBus` and route the existing right-click orders through it. _Every later system depends on it._
+**Sunday**
+10. Teams, `is_enemy`, shared fog, Team and FFA win conditions, lobby.
+11. The `MiddleEarth4` map: 4 bases, Town Center with 3 towers plus an outer ring, 6 lanes, jungle and boss camp.
+12. Jungle camps, gold, and a 6-item shop.
+13. Théoden, Gothmog and Lurtz abilities.
+14. Bot players (economy, auto-repeat on lanes, hero farming and pushing, retreating at low HP).
+15. Play full matches in both modes and balance.
 
-**Saturday: the hybrid loop (8–10h)**
-4. Hero: click-to-move, auto-attack, HP/mana, camera follow and free-look, death and respawn timer.
-5. Remove unit selection. Add `Squadron` (leader plus formation) and change the barracks to spawn squadrons.
-6. Proximity orders: squads within 15m light up, and you choose one with Tab and give it Attack, Defend, Hold or Return. **Playtest here.** If it isn't fun, change the controls before going further.
-7. Auto-workers and 3 resources. `BaseZone` gates the build menu.
-8. Ability framework, then Aragorn's QWER. XP and levels.
-9. Import the LOTR heroes (Aragorn, Orc as Gothmog, Uruk-hai as Lurtz) through Mixamo and Godot `BoneMap` retargeting. _Budget 3h. If it overruns, fall back to KayKit for now._
-
-**Sunday: the game (8–10h)**
-10. Teams, `is_enemy`, shared fog, team win condition.
-11. 2v2 map: 4 corner bases, Town Center with 3 towers plus an outer ring, ally route, lanes and jungle.
-12. `LaneManager`: activate a lane, then barracks waves every 60s. Squad size grows every 5 minutes.
-13. Jungle camps, gold, and a shop with 6 items.
-14. Théoden, Gothmog and Lurtz abilities (12 abilities).
-15. `BotHero` AI, so there are 3 bots plus you.
-16. Main menu with faction/hero pick and the collision toggle. Then play full matches and balance.
-
-### Tests needed
-- **Unit (GUT, headless):** damage and true-damage maths (Aragorn's passive), cooldown and mana checks, the respawn timer curve, XP level thresholds, resource ledger (can't overspend), `is_enemy` with allies, squad state transitions (ATTACK → target dead → IDLE), lane wave timer, shop purchase.
-- **Smoke (headless):** `godot --headless --path . --quit-after 600` boots the match scene with 4 bots and no script errors. This runs in CI on GitHub Actions.
-- **Manual:** the playtest checklist in `tests/manual/` (open-rts already has this folder).
-- **Performance:** the 150-unit benchmark scene; at least 45 FPS on the target laptop.
+### Tests
+- **Unit (GUT, headless):** counter multipliers, the economy ledger (no overspending, auto-repeat skips when broke), Age gating, the population cap, `is_enemy` in Team vs FFA, squad state transitions, the respawn curve, XP thresholds, ability cooldown and mana, shop purchases.
+- **Smoke:** `godot --headless --quit-after 600` runs a 4-bot match in each mode without script errors. This runs in GitHub Actions CI.
+- **Performance:** a 150-unit benchmark scene, at least 45 FPS on the target laptop.
 
 ```
 ══════════════════════════════
   ENG REVIEW
 ══════════════════════════════
 Architecture: SOUND, with 3 concerns
-  - No ally concept in open-rts → Mitigation: Utils.is_enemy() everywhere + shared fog (step 10)
-  - 100+ units on weak laptops → Mitigation: leader-only pathing, Mobile renderer, benchmark first (step 2)
-  - Multiplayer retrofit → Mitigation: CommandBus from step 3; bots use it too
-
-Plan: 16 steps, ~20 new files, ~12 modified
-Complexity: L for the weekend slice (XL for the full design)
-Risk: MEDIUM. Performance and model rigging are the unknowns; both are tested early with fallbacks.
+  - No allies in open-rts → is_enemy() + shared fog (step 10)
+  - 100+ units on laptops → leader-only pathing, Mobile renderer, benchmark at step 2
+  - Multiplayer retrofit → Command Bus from step 3
+Plan: M1 = 15 steps, ~30 new files, ~12 modified
+Complexity: L (M1); XL overall
+Risk: MEDIUM
 ══════════════════════════════
 ```
 
@@ -200,73 +238,42 @@ Risk: MEDIUM. Performance and model rigging are the unknowns; both are tested ea
 
 ## Phase 3: Design review (UX spec)
 
-### Flow
-Main menu, then Pick faction (Gondor, Rohan, Mordor, Isengard), then Pick hero, then Loading, then Match, then Victory or Defeat screen (stats: kills, gold, squads lost), then back to the menu.
-
-### Controls
+**Flow:** Main menu, then Lobby (mode Team/FFA, then 4 slots each set to You/Bot with faction and team, then settings), then Hero pick, then Match, then Results (kills, gold, squads trained, buildings lost), then back to the menu.
 
 | Input | Action |
 |---|---|
-| Right-click ground | Move the Hero |
-| Right-click enemy | Hero auto-attacks it |
-| Q W E R | Abilities (Ctrl+key levels one up) |
-| Y | Toggle camera lock or free-look. Edge-scrolling and middle-drag work while free. |
-| Space | Snap the camera back to the Hero |
-| Tab | Cycle through squadrons within command range |
-| 1 / 2 / 3 / 4 | Selected squad: **Attack** (click a target) / **Defend** (click a point or building) / **Hold** / **Return home** |
-| B | Build menu (only inside the base) |
-| P | Shop (only inside the base) |
+| Right-click ground / enemy | Move the Hero / attack |
+| Q W E R (Ctrl+key levels one up) | Abilities |
+| Y / Space | Camera lock toggle / snap back to the Hero |
+| Tab | Cycle through squadrons within 15m |
+| 1 / 2 / 3 / 4 | Squad: Attack (click) / Defend (click) / Hold / Return home |
+| B / P | Build panel / Shop (base only) |
 
-### HUD
-- **Bottom centre:** hero portrait, HP and mana bars, level and XP ring, the QWER bar with cooldown sweeps and mana-cost greying, and 6 item slots.
-- **Top:** wood, stone, meat, gold, match clock, and team scores.
-- **Bottom right:** minimap showing lanes, fog, and pings for squads under attack.
-- **Squad Order panel (contextual, bottom left):** appears only when a squad is within 15m. It shows the squad icon, size, HP and current order, plus the 1–4 order buttons. A 15m ring is drawn on the ground around the Hero.
-- **Base panel:** opens while the Hero is inside the base zone. It has tabs for Build, Barracks (lane activation and upgrades) and Shop.
+**HUD:**
+- **Bottom centre:** Hero portrait, HP and mana, XP, QWER cooldowns, 6 item slots.
+- **Top:** Food, Wood, Iron, Gold, population, Age, clock.
+- **Bottom right:** minimap with lanes and squad pings.
+- **Bottom left:** squad order panel (visible only when a squad is in range).
+- **Base panel** (while inside the base) has tabs:
+  - **Build:** buildings filtered by Age.
+  - **Military:** each production building with Train, Auto-repeat, lane picker, upgrade, and "next squad in 0:42".
+  - **Age:** advance to the next Age.
+  - **Shop:** hero items.
 
-### States
-- **No squads nearby:** the order panel is hidden, and a faint tip reads "Move closer to a squadron to command it." The minimap shows where the squads are.
-- **Outside the base:** the B and P keys show the toast "Return to your base to build or shop."
-- **Hero dead:** the screen goes greyscale with a countdown ("Respawning in 0:23"), and the camera switches to free-look. You can't issue squad orders until you respawn.
-- **Can't afford something:** the cost turns red and a tooltip names the missing resource.
-- **Lane not activated yet:** the barracks show "Choose a lane", with arrows on the map.
-- **Mobile:** not applicable. The target is desktop and laptop with mouse and keyboard.
-
----
-
-## Weekend heroes (one per faction)
-
-| Faction | Hero | Q | W | E | R | Model |
-|---|---|---|---|---|---|---|
-| Gondor | **Aragorn** (Fighter) | Andúril Strike: bonus true damage based on the target's missing HP | "For Frodo!": nearby troops get +30% attack speed | Ranger's Dash | **Army of the Dead**: summon a ghost squadron for 15s | Sketchfab Aragorn (PhixerArt) |
-| Rohan | **Théoden** (Enchanter) | Royal Guard: shield an ally squad | Horn of Rohan: AoE fear | Rally Aura (passive): troop regen | **Ride of the Rohirrim**: cleanse plus team-wide speed | ⚠️ No free model found, so KayKit knight with a recolour |
-| Mordor | **Gothmog** (Vanguard tank) | Cleaver: cone damage | **Warg Pack**: summon wargs that slow | Iron Hide: damage reduction | Siege Lord: troops deal +50% to buildings | Sketchfab Orc (PhixerArt) |
-| Isengard | **Lurtz** (Diver) | Heavy Arrow: damage plus pin (root) | The Hunt: speed toward low-HP enemies | Volley: area arrows | Berserker Charge: dash plus execute | Sketchfab Uruk-hai (decimate to about 15k tris) |
-
-The other 20 heroes from your roster go in `data/heroes/` after the weekend, since the system is data-driven.
+**States:**
+- **No squad nearby:** the order panel is hidden, with the tip "Move closer to a squadron to command it".
+- **Outside the base:** pressing B or P shows "Return to your base".
+- **Hero dead:** the screen turns greyscale with a respawn countdown, and squad orders are locked.
+- **Auto-repeat can't afford:** the building icon flashes red, and a toast reads "Archery Range skipped: need 40 Wood".
+- **Locked by Age:** the button is greyed out with "Requires Age II".
 
 ---
 
-## Proposed 2v2 map layout
-
-```
- Gondor ●━━━━━━━━ lane ━━━━━━━━● Mordor
-   ┃  ╲    jungle   jungle   ╱  ┃
- ally   ╲      ╲    ╱       ╱   ally
- route   lane    ╲╱  centre   route
-   ┃     ╱      ╱  ╲  camp ╲    ┃
-   ┃  ╱    jungle   jungle   ╲  ┃
- Rohan ●━━━━━━━━━ lane ━━━━━━━━● Isengard
-```
-Each base has 1 route to its ally and 2 lanes to the enemies (straight and diagonal). The diagonals cross at a central boss camp (a Cave Troll that gives a team buff).
-
----
-
-## Open questions
-1. **Teams:** is this 2v2 (Gondor + Rohan vs Mordor + Isengard), or 4-way free-for-all? The plan assumes 2v2, because "1 route to an ally" implies teams.
-2. **Which 4 factions** to start with? The plan assumes Gondor, Rohan, Mordor and Isengard. Harad, Elves, Dwarves and the Wild come later.
-3. **Attack-unit unlock criterion:** what has to happen first? The default is a Barracks plus a stockpile, or 3 minutes of match time.
-4. **Free vs paid squads:** are lane waves free (MOBA) or paid from resources (RTS)? The default is free base waves, with resources buying upgrades and extra squads.
-5. **Multiplayer priority:** is LAN next after the slice, or more heroes first?
-6. **Rohan hero model:** you'll need to find or commission a Théoden model, or keep the KayKit stand-in.
-7. **Downloads you must do yourself:** Sketchfab and Mixamo need your login, so I can't fetch those models from here.
+## Open questions (answer when ready; defaults are in **bold**)
+1. **Team pairings:** are Gondor + Rohan vs Mordor + Isengard fixed, or can you pick any teams in the lobby? Default: **any, with the LOTR pairing preselected**.
+2. **Unit rosters above:** change any unit you don't like. They're defaults, not decisions.
+3. **Resource names:** Food/Wood/Iron/Gold, or would you rather have Stone as well (for walls and towers, like AoE)? Default: **4 resources, no Stone**.
+4. **Who trains workers:** do they auto-spawn for free up to a cap, or does the Town Center auto-train them for Food? Default: **auto-train for 50 Food each, up to 20**.
+5. **Hero shop location:** the Town Center only, or a separate shop building? Default: **Town Center**.
+6. **Multiplayer before or after M2?** Default: **after** (M3).
+7. **Rohan hero model:** look for a paid or commissioned Théoden model, or keep the KayKit stand-in?

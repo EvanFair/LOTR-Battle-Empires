@@ -30,7 +30,7 @@ git clone --depth 1 https://github.com/spicylobstergames/shotcaller-godot
 | `VehicleFactory` | Barracks |
 | `Tank` | Gondor Soldier / Orc Warrior |
 | `AntiGroundTurret` | Watchtower |
-| `Drone` / `Helicopter` / `AircraftFactory` | Cut for v1 (Eagles / Fell Beasts later) |
+| `Drone` / `Helicopter` / `AircraftFactory` | Disabled in M1; air navigation kept for Eagles and Fell Beasts (M5) |
 | *(new)* | **Hero**: a click-to-move commander with QWER abilities that issues orders to troops near it |
 
 ## 2. Lord of the Rings models

@@ -2,7 +2,7 @@
 
 A Lord of the Rings **MOBA + RTS hybrid** built in **Godot 4** (3D).
 You control only your Hero, Dota-style. Your economy runs itself, and you command squadrons of troops by leading them in person.
-Four factions, 2v2: Gondor + Rohan vs Mordor + Isengard.
+Team (2v2) and Free-for-All modes. 8 factions planned, 4 at launch: Gondor, Rohan, Mordor and Isengard.
 
 - **Plan:** [docs/PLAN.md](docs/PLAN.md): scope, architecture, weekend build steps, and UX spec
 - **Research:** [docs/RESEARCH.md](docs/RESEARCH.md): reference code bases, free LOTR models, and tools
