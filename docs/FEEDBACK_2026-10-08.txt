@@ -1,0 +1,65 @@
+PLAYTEST FEEDBACK - voice note 8 Oct 2026 (44 min, Afrikaans + English)
+==========================================================================
+Transcribed with Whisper (English and Afrikaans passes, read side by side).
+[mm:ss] = where it is in the voice note. "?" = the audio was unclear.
+
+MAIN MESSAGE
+- Too much sitting in the base, building and farming. The game should be about
+  the HERO and player action out on the map, like League of Legends. The base
+  matters, but it is not the main idea.                          [08:30, 31:30, 32:00]
+
+ECONOMY AND BASE
+1. Way too many villagers. Cut them down.                                   [31:30]
+2. Food is broken. 800 Food for the Empire Age is impossible: with every
+   villager on Food it was 144 per minute, at one point 0 per minute.      [24:30, 32:30]
+3. Villagers cost Food to replace, so with no Food you can't get villagers
+   to make Food. "It doesn't make sense."                                   [23:00]
+4. Killing animals should give Food, or leave a carcass to collect (like Age
+   of Empires hunting).                                                     [28:30]
+5. Feeding supplies to the training buildings (hauling) is too fiddly; the
+   army stopped because the supply could not keep up.                       [22:30, 36:00]
+6. Waiting in the base (build timers, standing at the Town Center for the
+   Age) is way too long.                                                    [30:30]
+7. You should be able to build anywhere. You also have to build too much,
+   too early.                                                              [29:00, 09:00]
+8. Resources: all workers ended up on one side of the base, supply was slow.
+   (Unclear whether you want resources to run out or not.)                  [36:30] ?
+9. You can build way too many towers. Towers should behave like League of
+   Legends towers (strong, and they punish whoever attacks near them).      [11:30]
+10. Didn't understand what the Blacksmith and Siege Works are for. The UI
+   needs to explain buildings better.                                       [15:00]
+
+HEROES
+11. Mana is effectively infinite: QWER can be spammed. Mana regen too high.  [06:30]
+12. Abilities show as usable even without enough mana. They should be
+   blocked (greyed out) when you can't afford them.                         [30:30]
+13. Health and mana should regenerate at your own Town Center (like the
+   fountain in LoL).                                                        [15:30, 24:00]
+14. Your hero should walk through your own units (not through buildings).   [43:30]
+15. Don't like the current icons.                                           [31:00]
+16. Respawn time is fine early; fine for it to grow later.                  [14:00]
+
+THE WILD / JUNGLE
+17. Killing monsters must be a much bigger part of the game, and easier.
+   Going out to the middle of the map should pay off with extra XP and gold,
+   like farming the jungle in LoL.                                          [09:30, 28:30, 34:00]
+
+ARMIES AND CONTROLS (needs a complete rework)
+18. Controlling armies has to be completely reworked. You should be able to
+   control them from ANYWHERE, not only within 15m.                         [10:00, 13:30, 34:00]
+19. Simpler orders, e.g. "FOLLOW ME": the army follows the hero, attacks what
+   the hero attacks and does what the hero does.                            [34:00]
+20. Click-and-drag box selection. If one soldier of a squad is inside the
+   box, the whole squad is selected.                                        [34:30, 35:00]
+21. With 8 squadrons it is too hard to make them attack.                     [43:30]
+22. Lanes should be named and shown like LoL (top / mid / bot) so you know
+   where to go. The current lane names don't make sense.                   [43:00]
+23. Camera: clicking the minimap unlocks the camera and you have to press
+   Space to get it back; annoying.                                          [11:00]
+24. Mordor: "Where are my trolls?" You built the Black Gate (special
+   building) expecting trolls. Also asked why the archers are Orc Archers.  [33:30, 37:30]
+
+LOOK
+25. Graphics should look more like the real thing, less cartoon. (Matches
+   the low-poly reference: adult proportions, not chibi. Art prompts done.) [35:30]
+26. The map lanes are too straight; they need bends and winds. (Your text.)
