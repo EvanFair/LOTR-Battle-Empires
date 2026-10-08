@@ -21,11 +21,13 @@ _Produced with the gstack-autoplan pipeline (CEO, then Eng, then Design review).
 | HUD: resource bar, hero panel, squadron panel, base panel, bubbles, building labels, toasts, end screen | Done (checked in screenshots) |
 
 **Not done yet / simplified:**
-- **Real LOTR models:** units are low-poly stand-in shapes. Importing the Sketchfab/KayKit models (step 15) needs your downloads.
+- **Real LOTR models:** units and buildings now use the free KayKit packs (animated, per-faction colours). LOTR-specific hero models from Sketchfab still need your downloads.
 - **Performance on a real laptop:** this needs your machine. The 4-bot test peaks at about 150 units; run it and watch the FPS (F1 shows the diagnostics overlay).
 - **Unit collision on/off setting:** not built yet (small).
 - **Ability levelling (Ctrl+key):** abilities are all available from level 1 for now.
 - **Clients' fog of war** is computed locally from replicated positions, so it isn't cheat-proof (fine on a friendly LAN).
+
+> **Latest QA (2026-10-08):** see [QA.md](QA.md). Six bugs fixed; the stand-in shapes are replaced by animated KayKit models; the gap to the full game is listed there.
 
 ## Executive summary
 
