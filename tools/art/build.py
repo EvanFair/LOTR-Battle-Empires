@@ -185,6 +185,16 @@ for cid, name, desc in A.CREATURES:
     chars.append({"id": cid, "name": name.split(" (")[0], "faction": "The Wild", "role": name.split("(")[1].rstrip(")").capitalize(),
                   "anims": ANIM["creature"], "tris": "4–10k"})
 
+# give every image a short code (section letter + number) written into the prompt for filing
+PREFIX = {"boards": "SB", "heroes": "HT", "portraits": "HP", "troops": "AR", "creatures": "WI", "buildings": "BD",
+          "props": "PR", "textures": "TX", "map": "MP", "abilities": "AB", "icons": "IC", "emblems": "EM",
+          "ui": "UI", "screens": "KA"}
+for sec in sections:
+    for n, it in enumerate(sec["items"], 1):
+        it["code"] = f"{PREFIX[sec['id']]}{n:02d}"
+        it["prompt"] += (f"\n\nAsset code: {it['code']} / {it['file']} (this code is only for filing the image; "
+                         "do NOT write it or any other text in the picture).")
+
 styles = [{"id": k, "name": v["name"], "use": v["use"], "text": v["text"]} for k, v in STYLES.items()]
 factions = [{"id": k, "name": v["name"], "look": v["look"]} for k, v in FACTIONS.items()]
 data = {"sections": sections, "styles": styles, "factions": factions, "characters": chars, "world": WORLD}
