@@ -53,7 +53,7 @@ Every push to `main` builds a fresh `.exe` and publishes it as a new Release aut
 - **Counters:** infantry beats riders, riders beat archers, archers beat infantry, and heavy units wreck buildings.
 - **Win:** destroy every enemy Town Center.
 
-The heroes playable now are Aragorn (all four abilities), and Théoden, Gothmog and Lurtz (one signature ability each). Units use simple stand-in shapes until the LOTR models are imported (see the research doc).
+The heroes playable now are Aragorn (all four abilities), and Théoden, Gothmog and Lurtz (one signature ability each). Art comes from Kay Lousberg's free CC0 KayKit packs (animated characters, medieval buildings, nature); each faction has its own building colours, unit tints and weapons. See `assets/kaykit/` for the licences.
 
 ## Tests
 
@@ -90,5 +90,6 @@ GitHub Actions runs the bot and rules tests on every push (`.github/workflows/te
 | `source/lotr/map/MapGen.gd` | The 4-base, 6-lane map |
 | `source/match/…` | Reused from open-rts: navigation, fog of war, minimap, camera, unit traits |
 
+3D art: [KayKit](https://kaylousberg.com) Adventurers, Skeletons and Medieval Hexagon packs by Kay Lousberg (CC0).
 Built on [lampe-games/godot-open-rts](https://github.com/lampe-games/godot-open-rts) (MIT, see `LICENSE-open-rts`).
 Personal fan project, not affiliated with the Tolkien Estate or Warner Bros.

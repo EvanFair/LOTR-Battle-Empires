@@ -10,10 +10,15 @@ var _shots = [
 	[3.0, "01_start", ""],
 	[40.0, "02_base_panel", "base"],
 	[45.0, "03_bubbles", "bubbles"],
-	[150.0, "04_battle", "battle"],
+	[300.0, "04_battle", "battle"],
+	[302.0, "05_battle_close", "battle_close"],
+	[304.0, "06_hero_close", "hero_close"],
+	[306.0, "07_mordor_base", "mordor"],
+	[308.0, "08_rohan_base", "rohan"],
 ]
 var _index = 0
 var _busy = false
+var _battle_focus = Vector3.ZERO
 
 
 func _ready():
@@ -68,10 +73,33 @@ func _prepare(kind):
 		"battle":
 			_match.hud._bubbles.visible = false
 			# look at the busiest fight on the map
+			# the squadron furthest from every base is the one out fighting in the lanes
 			var best = null
+			var best_d = -1.0
 			for s in get_tree().get_nodes_in_group("squadrons"):
-				if best == null or s.state == s.State.ATTACK:
+				var c = s.center()
+				var d = INF
+				for sp in MapGen.spawn_points():
+					d = min(d, c.distance_to(sp))
+				if d > best_d:
+					best_d = d
 					best = s
 			_match.hero_controller.camera_locked = false
 			if best != null:
 				_match.find_child("IsometricCamera3D").set_position_safely(best.center())
+			_battle_focus = best.center() if best != null else Vector3.ZERO
+		"battle_close":
+			var cam = _match.find_child("IsometricCamera3D")
+			cam.set_size_safely(13.0)
+			cam.set_position_safely(_battle_focus)
+		"hero_close":
+			var cam = _match.find_child("IsometricCamera3D")
+			cam.set_size_safely(10.0)
+			cam.set_position_safely(me.hero.global_position)
+		"mordor", "rohan":
+			var slot = 1 if kind == "mordor" else 2
+			var cam = _match.find_child("IsometricCamera3D")
+			cam.set_size_safely(24.0)
+			cam.set_position_safely(MapGen.spawn_points()[slot])
+			_match.fog_of_war.reveal()
+			_match.find_child("UnitVisibilityHandler").visible = false  # show enemy buildings too

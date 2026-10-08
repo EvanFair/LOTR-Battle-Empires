@@ -14,6 +14,7 @@ const VillagerScript = preload("res://source/lotr/units/Villager.gd")
 const HeroScript = preload("res://source/lotr/units/Hero.gd")
 const BuildingScript = preload("res://source/lotr/units/Building.gd")
 const ResourceScript = preload("res://source/lotr/units/ResourceNode.gd")
+const AnimDriverScript = preload("res://source/lotr/art/AnimDriver.gd")
 
 const SKIN = Color("e0b48c")
 const ORC_SKIN = Color("5d6b3a")
@@ -66,25 +67,38 @@ static func _create_troop(params):
 	unit.target_kind = params["class"] if params["class"] != "special" else "infantry"
 	unit.display_name = stats.name
 	var geometry = _geometry(unit)
-	var skin = _skin_for(params.faction)
-	match params["class"]:
-		"infantry":
-			_humanoid(geometry, params.faction, skin, "sword", 1.0)
-		"archer":
-			_humanoid(geometry, params.faction, skin, "bow", 1.0)
-		"special":
-			_humanoid(geometry, params.faction, skin, "bow", 1.05)
-		"rider":
-			_rider(geometry, params.faction, skin)
-		"heavy":
-			if params.faction in ["mordor", "wild", "harad"]:
-				_troll(geometry, params.faction)
-			else:
-				_siege(geometry)
+	var unit_class = params["class"]
+	var look = Art.unit_look(params.faction, unit_class)
 	if params.get("ghost", false):
-		_ghostify(geometry)
-	_finish_mobile(unit, stats, 1.6 if params["class"] != "heavy" else 2.4)
+		# Army of the Dead: risen skeleton warriors, translucent green
+		var dead = _character(unit, geometry, "Skeleton_Warrior", [], Color(1, 1, 1), 1.0, "melee")
+		Art.ghost(dead)
+		var anim = dead.get_meta("anim")
+		if anim.has_animation("Skeletons_Awaken_Standing"):
+			anim.play("Skeletons_Awaken_Standing")
+	elif unit_class == "heavy" and not Art.UNITS.get(params.faction, {}).has("heavy"):
+		_siege(geometry)
+	elif unit_class == "rider":
+		_mount(geometry, params.faction)
+		var rider = _character(unit, geometry, look[0], look[1], look[2], look[3], "rider")
+		rider.position = Vector3(0, 0.62, 0.05)
+	else:
+		_character(unit, geometry, look[0], look[1], look[2], look[3], look[4])
+	_finish_mobile(unit, stats, 1.9 if unit_class != "heavy" else 3.4)
 	return unit
+
+
+static func _character(unit, geometry, model, props, tint, scale, anim_set, hide = []):
+	var node = Art.character(model, props, tint, scale, hide)
+	geometry.add_child(node)
+	if node.has_meta("anim"):
+		var driver = AnimDriverScript.new()
+		driver.name = "AnimDriver"
+		driver.player = node.get_meta("anim")
+		driver.anim_set = anim_set
+		unit.add_child(driver)
+		unit.anim_driver = driver
+	return node
 
 
 static func _create_villager(params):
@@ -95,8 +109,9 @@ static func _create_villager(params):
 	unit.target_kind = "villager"
 	unit.display_name = "Villager"
 	var geometry = _geometry(unit)
-	_humanoid(geometry, params.faction, _skin_for(params.faction), "tool", 0.85)
-	_finish_mobile(unit, stats, 1.3)
+	var tint = Art.ORC if params.faction == "mordor" else (Art.URUK if params.faction == "isengard" else Color(0.95, 0.85, 0.7))
+	_character(unit, geometry, "Mage", [], tint, 0.85, "worker", ["Mage_Hat"])
+	_finish_mobile(unit, stats, 1.5)
 	return unit
 
 
@@ -114,12 +129,11 @@ static func _create_hero(params):
 	unit.hero_key = params.hero
 	unit.display_name = data.name
 	var geometry = _geometry(unit)
-	var weapon = "bow" if data.get("ranged", false) else "sword"
-	_humanoid(geometry, data.faction, _skin_for(data.faction), weapon, 1.35)
-	# cape and a gold marker so heroes stand out
-	_part(geometry, _box(Vector3(0.55, 0.9, 0.06)), null, Vector3(0, 1.0, 0.22), true)
-	_part(geometry, _torus(0.18, 0.24), Color("e8c24a"), Vector3(0, 2.45, 0))
-	_finish_mobile(unit, stats, 2.4)
+	var look = Art.HEROES.get(params.hero, Art.HEROES.aragorn)
+	_character(unit, geometry, look[0], look[1], look[2], look[3], look[4], look[5])
+	# a gold ring at the feet so heroes stand out in a crowd
+	_part(geometry, _torus(0.62, 0.72), Color("e8c24a"), Vector3(0, 0.04, 0))
+	_finish_mobile(unit, stats, 2.6)
 	unit.add_to_group("heroes")
 	return unit
 
@@ -161,7 +175,12 @@ static func _create_building(params):
 	var geometry = _geometry(unit)
 	var faction_color = GameData.FACTIONS[params.get("faction", "gondor")].color
 	var s = data.size
-	match params.building:
+	var model = Art.building(params.building, params.get("faction", "gondor"), s)
+	if model != null:
+		model.name = "BuildingModel"
+		geometry.add_child(model)
+		unit.set_meta("model_height", Art.prop_height(Art.BUILDING_MODELS[params.building][0] % Art.BUILDING_COLOR.get(params.get("faction", "gondor"), "blue")) * model.scale.y)
+	match params.building if model == null else "":
 		"town_center":
 			_part(geometry, _box(Vector3(s * 1.6, 1.6, s * 1.6)), STONE, Vector3(0, 0.8, 0))
 			_part(geometry, _prism(Vector3(s * 1.7, 1.2, s * 1.7)), null, Vector3(0, 2.2, 0), true)
@@ -210,7 +229,7 @@ static func _create_building(params):
 		verts.append(Vector3(cos(angle), 0, sin(angle)) * s * 0.9)
 	obstacle.vertices = verts
 	unit.add_child(obstacle)
-	_common_traits(unit, s + 0.3, 3.0 if params.building != "watchtower" else 6.0)
+	_common_traits(unit, s + 0.3, unit.get_meta("model_height", 3.0) + 0.4)
 	return unit
 
 
@@ -231,29 +250,37 @@ static func _create_resource(params):
 	node.add_child(geometry)
 	var rng = RandomNumberGenerator.new()
 	rng.seed = hash(params.get("seed", 0))
+	var yaw = rng.randf() * TAU
 	match params.type:
 		"wood":
-			for i in range(3):
-				var offset = Vector3(rng.randf_range(-0.6, 0.6), 0, rng.randf_range(-0.6, 0.6))
-				_part(geometry, _cylinder(0.12, 0.15, 1.0), WOOD, offset + Vector3(0, 0.5, 0))
-				_part(geometry, _cone(0.6, 1.6), Color("2f6b2a"), offset + Vector3(0, 1.7, 0))
+			var trees = Art.prop(["trees_A_medium", "trees_B_medium", "trees_A_small"][rng.randi() % 3], 2.3)
+			trees.rotation.y = yaw
+			geometry.add_child(trees)
 		"stone":
-			for i in range(3):
-				var offset = Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5))
-				var size = rng.randf_range(0.5, 0.9)
-				_part(geometry, _box(Vector3(size, size * 0.8, size)), STONE, offset + Vector3(0, size * 0.4, 0),
-					false, Vector3(0, rng.randf() * PI, 0))
+			for k in range(3):
+				var rock = Art.prop("rock_single_%s" % ["A", "B", "C", "D", "E"][rng.randi() % 5], rng.randf_range(0.7, 1.1))
+				rock.position = Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5))
+				rock.rotation.y = rng.randf() * TAU
+				geometry.add_child(rock)
+			var pile = Art.prop("resource_stone", 0.9)
+			pile.position = Vector3(0.4, 0, 0.4)
+			geometry.add_child(pile)
 		"iron":
-			_part(geometry, _sphere(0.8), Color("4a4f57"), Vector3(0, 0.35, 0))
-			for i in range(3):
-				var offset = Vector3(rng.randf_range(-0.5, 0.5), 0.6, rng.randf_range(-0.5, 0.5))
-				_part(geometry, _sphere(0.18), Color("b0562a"), offset)
+			# dark, rust-streaked rock outcrop
+			var outcrop = Art.prop("mountain_A", 2.0, Color(0.45, 0.4, 0.38))
+			outcrop.scale.y *= 0.55
+			outcrop.rotation.y = yaw
+			geometry.add_child(outcrop)
+			var ore = Art.prop("resource_stone", 0.8, Color(0.75, 0.42, 0.28))
+			ore.position = Vector3(0.7, 0, 0.5)
+			geometry.add_child(ore)
 		"food":
-			for i in range(3):
-				var offset = Vector3(rng.randf_range(-0.7, 0.7), 0, rng.randf_range(-0.7, 0.7))
-				_part(geometry, _capsule(0.18, 0.7), Color("9a6a3e"), offset + Vector3(0, 0.35, 0),
-					false, Vector3(0, 0, PI / 2))
-				_part(geometry, _sphere(0.14), Color("7a4a2a"), offset + Vector3(0.38, 0.45, 0))
+			var field = Art.prop("building_grain", 2.2)
+			field.rotation.y = yaw
+			geometry.add_child(field)
+			var sacks = Art.prop("sack", 0.45)
+			sacks.position = Vector3(0.9, 0.05, 0.6)
+			geometry.add_child(sacks)
 	_collision(node, 0.8, 1.2)
 	var obstacle = ObstacleScene.instantiate()
 	obstacle.name = "MovementObstacle"
@@ -360,6 +387,33 @@ static func _rider(geometry, faction, skin):
 			_part(geometry, _cylinder(0.06, 0.06, 0.55), horse_color, Vector3(x, 0.27, z))
 	var rider = _humanoid(geometry, faction, skin, "spear", 0.85)
 	rider.position = Vector3(0, 0.55, 0.05)
+
+
+static func _mount(geometry, faction):
+	"""A horse for the Free Peoples, a warg for the Shadow, built from simple shapes."""
+	var shadow = GameData.FACTIONS[faction].side == "shadow"
+	var coat = Color("3b332c") if shadow else Color("7a5434")
+	var mane = Color("1f1a17") if shadow else Color("3a2617")
+	var root = Node3D.new()
+	geometry.add_child(root)
+	var body_len = 1.15 if not shadow else 1.0
+	var leg_h = 0.62 if not shadow else 0.45
+	_part(root, _capsule(0.27, body_len + 0.3), coat, Vector3(0, leg_h + 0.12, 0), false, Vector3(PI / 2, 0, 0))
+	# neck and head
+	var neck_tilt = -0.75 if not shadow else -0.25
+	_part(root, _capsule(0.13, 0.62), coat, Vector3(0, leg_h + 0.42, -body_len * 0.52), false, Vector3(neck_tilt, 0, 0))
+	_part(root, _box(Vector3(0.2, 0.22, 0.48 if not shadow else 0.4)), coat, Vector3(0, leg_h + 0.66 - (0.25 if shadow else 0.0), -body_len * 0.72), false, Vector3(0.35 if not shadow else 0.05, 0, 0))
+	_part(root, _box(Vector3(0.06, 0.4, 0.35)), mane, Vector3(0, leg_h + 0.55, -body_len * 0.45), false, Vector3(neck_tilt, 0, 0))
+	if shadow:  # warg ears
+		for x in [-0.07, 0.07]:
+			_part(root, _cone(0.05, 0.14), mane, Vector3(x, leg_h + 0.52, -body_len * 0.6))
+	for x in [-0.15, 0.15]:
+		for z in [-body_len * 0.42, body_len * 0.42]:
+			_part(root, _cylinder(0.055, 0.045, leg_h), mane if shadow else coat, Vector3(x, leg_h / 2.0, z))
+	_part(root, _capsule(0.05, 0.5), mane, Vector3(0, leg_h + 0.1, body_len * 0.62), false, Vector3(0.9, 0, 0))
+	# saddle cloth in team colour
+	if not shadow:
+		_part(root, _box(Vector3(0.6, 0.06, 0.5)), null, Vector3(0, leg_h + 0.38, 0.05), true)
 
 
 static func _troll(geometry, faction):

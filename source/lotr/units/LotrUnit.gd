@@ -32,6 +32,8 @@ var speed_mult = 1.0:
 var rooted_until = 0.0
 var buffs = []  # {stat, mult, until}
 var last_attacker = null
+var anim_driver = null
+var last_attack_at = -10.0  # game time of the latest swing (replicated so puppets animate too)
 
 var order = Order.IDLE
 var order_target = null  # unit for ATTACK
@@ -202,7 +204,15 @@ func _try_hit(target):
 	if distance > attack_range + _target_radius(target) + 0.2:
 		return
 	_next_hit_at = now + attack_interval / attack_speed_mult
+	_face(target.global_position)
+	notify_attack()
 	Combat.attack(self, target, attack_damage * damage_mult)
+
+
+func notify_attack():
+	last_attack_at = GameData.now()
+	if anim_driver != null:
+		anim_driver.play_attack()
 
 
 func _face(point: Vector3):
@@ -248,7 +258,35 @@ func _set_action(action_node):
 
 func _handle_unit_death():
 	died_on_host.emit()
+	_leave_remains()
 	super()
+
+
+func _leave_remains():
+	"""Fallen units collapse and sink away; destroyed buildings leave rubble for a while."""
+	var match_node = get_tree().get_first_node_in_group("lotr_match") if is_inside_tree() else null
+	if match_node == null:
+		return
+	var model = find_child("Model")
+	if model != null and model.has_meta("anim"):
+		var t = model.global_transform
+		model.get_parent().remove_child(model)
+		match_node.add_child(model)
+		model.global_transform = t
+		var anim = model.get_meta("anim")
+		anim.play(["Death_A", "Death_B"][randi() % 2], 0.1)
+		var tween = model.create_tween()
+		tween.tween_interval(4.0)
+		tween.tween_property(model, "position:y", model.position.y - 1.2, 2.5)
+		tween.tween_callback(model.queue_free)
+	elif unit_kind == "building":
+		var rubble = Art.prop("building_destroyed", get("stats_size").call() * 2.0 if has_method("stats_size") else 3.0)
+		match_node.add_child(rubble)
+		rubble.global_position = global_position
+		var tween = rubble.create_tween()
+		tween.tween_interval(20.0)
+		tween.tween_property(rubble, "position:y", rubble.position.y - 2.0, 4.0)
+		tween.tween_callback(rubble.queue_free)
 
 
 # --- puppets (clients) ------------------------------------------------------------------------

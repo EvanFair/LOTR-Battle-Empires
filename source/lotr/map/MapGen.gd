@@ -14,6 +14,8 @@ const SIZE = 140.0
 const INSET = 16.0
 const LANE_STEP = 8.0
 const LANE_CLEARANCE = 5.0
+const HILL_TINT = Color(0.62, 0.7, 0.5)  # calms the pack's bright yellow grass to a meadow green
+const GRASS = Color("5c7d3a")
 
 # lanes: pairs of spawn indices. With the default teams (0+2 vs 1+3) the west and east edges
 # are the ally routes, the rest are enemy lanes.
@@ -49,9 +51,21 @@ static func build(seed_value: int) -> Node3D:
 		marker.position = spawns[i]
 		spawn_root.add_child(marker)
 	var grass = StandardMaterial3D.new()
-	grass.albedo_color = Color("6f8f4e")
+	grass.albedo_color = GRASS
 	grass.roughness = 1.0
 	map.find_child("Terrain").material_override = grass
+	# land continues past the playable area so the edges aren't a black void
+	var outer = MeshInstance3D.new()
+	var outer_mesh = PlaneMesh.new()
+	outer_mesh.size = Vector2(SIZE + 160, SIZE + 160)
+	outer.mesh = outer_mesh
+	var outer_mat = StandardMaterial3D.new()
+	outer_mat.albedo_color = GRASS.darkened(0.12)
+	outer_mat.roughness = 1.0
+	outer.material_override = outer_mat
+	outer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	outer.position = Vector3(SIZE / 2.0, -0.05, SIZE / 2.0)
+	map.find_child("Decorations").add_child(outer)
 	var lanes = build_lanes()
 	map.set_meta("lanes", lanes)
 	_paint_lanes(map, lanes)
@@ -94,7 +108,7 @@ static func lanes_for(spawn_index: int) -> Array:
 static func _paint_lanes(map, lanes):
 	# dirt roads so lanes are readable on the ground
 	var dirt = StandardMaterial3D.new()
-	dirt.albedo_color = Color("9a8460")
+	dirt.albedo_color = Color("8a7350")
 	dirt.roughness = 1.0
 	var root = map.find_child("Decorations")
 	for lane in lanes:
@@ -108,7 +122,7 @@ static func _paint_lanes(map, lanes):
 			road.mesh = plane
 			road.material_override = dirt
 			road.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			road.position = (a + b) / 2.0 + Vector3(0, 0.02, 0)
+			road.position = (a + b) / 2.0 + Vector3(0, 0.06, 0)
 			road.rotation.y = atan2(b.x - a.x, b.z - a.z)
 			root.add_child(road)
 
@@ -182,52 +196,47 @@ static func _add_resource(root, type, point, placed, counter):
 
 static func _place_decorations(map, rng, spawns, lanes):
 	var root = map.find_child("Decorations")
-	var trunk = StandardMaterial3D.new()
-	trunk.albedo_color = Color("6b4a2b")
-	var leaves = StandardMaterial3D.new()
-	leaves.albedo_color = Color("3d6b35")
-	var rock = StandardMaterial3D.new()
-	rock.albedo_color = Color("8d8a80")
-	for i in range(120):
-		var p = Vector3(rng.randf_range(2, SIZE - 2), 0, rng.randf_range(2, SIZE - 2))
-		if _distance_to_lanes(p, lanes) < LANE_CLEARANCE + 2.0:
+	# mountain ranges frame the map
+	# The camera looks north, so only the far (north) edge gets tall peaks; the near edges get
+	# low hills pushed well outside the map so they never hide anything on the field.
+	var rock_tint = Color(0.72, 0.7, 0.66)
+	var step = 7.0
+	var t = -6.0
+	while t <= SIZE + 6.0:
+		var edges = [
+			[Vector3(t, 0, -5), ["mountain_A", "mountain_B", "mountain_C"], 10.0, 13.0, 0.8, 1.2],
+			[Vector3(-7, 0, t), ["mountain_A", "mountain_B", "hills_A_trees"], 8.0, 10.0, 0.5, 0.7],
+			[Vector3(SIZE + 7, 0, t), ["mountain_A", "mountain_B", "hills_B_trees"], 8.0, 10.0, 0.5, 0.7],
+			[Vector3(t, 0, SIZE + 9), ["hills_A_trees", "hills_B_trees", "hills_C_trees"], 8.0, 10.0, 0.35, 0.5],
+		]
+		for e in edges:
+			var pick = e[1][rng.randi() % e[1].size()]
+			var m = Art.prop(pick, rng.randf_range(e[2], e[3]), rock_tint if pick.begins_with("mountain") else HILL_TINT)
+			m.position = e[0] + Vector3(rng.randf_range(-1.5, 1.5), 0, rng.randf_range(-1.5, 1.5))
+			m.rotation.y = rng.randf() * TAU
+			m.scale.y *= rng.randf_range(e[4], e[5])
+			root.add_child(m)
+		t += step
+	# forests, hills and boulders between the lanes
+	var scenery = [
+		["trees_A_large", 4.5, 5.5], ["trees_B_large", 4.5, 5.5], ["trees_A_medium", 3.0, 4.0],
+		["tree_single_A", 1.2, 1.6], ["tree_single_B", 1.2, 1.6], ["hills_A_trees", 6.0, 8.0],
+		["hills_B_trees", 6.0, 8.0], ["hills_C_trees", 6.0, 8.0], ["rock_single_B", 1.0, 1.6],
+		["rock_single_D", 1.0, 1.6],
+	]
+	var placed = 0
+	var attempts = 0
+	while placed < 110 and attempts < 1200:
+		attempts += 1
+		var p = Vector3(rng.randf_range(4, SIZE - 4), 0, rng.randf_range(4, SIZE - 4))
+		var pick = scenery[rng.randi() % scenery.size()]
+		var width = rng.randf_range(pick[1], pick[2])
+		if _distance_to_lanes(p, lanes) < LANE_CLEARANCE + width * 0.5 + 1.0:
 			continue
-		var near_base = spawns.any(func(s): return s.distance_to(p) < GameData.BASE_RADIUS + 4.0)
-		if near_base:
+		if spawns.any(func(sp): return sp.distance_to(p) < GameData.BASE_RADIUS + 3.0):
 			continue
-		var deco = Node3D.new()
-		deco.position = p
-		if rng.randf() < 0.7:
-			var t = MeshInstance3D.new()
-			var tm = CylinderMesh.new()
-			tm.top_radius = 0.1
-			tm.bottom_radius = 0.14
-			tm.height = 0.8
-			tm.radial_segments = 6
-			t.mesh = tm
-			t.material_override = trunk
-			t.position.y = 0.4
-			deco.add_child(t)
-			var l = MeshInstance3D.new()
-			var lm = CylinderMesh.new()
-			lm.top_radius = 0.0
-			lm.bottom_radius = rng.randf_range(0.5, 0.8)
-			lm.height = rng.randf_range(1.2, 1.8)
-			lm.radial_segments = 6
-			l.mesh = lm
-			l.material_override = leaves
-			l.position.y = 0.8 + lm.height / 2.0
-			deco.add_child(l)
-		else:
-			var r = MeshInstance3D.new()
-			var rm = BoxMesh.new()
-			var s = rng.randf_range(0.3, 0.7)
-			rm.size = Vector3(s, s * 0.6, s * 1.2)
-			r.mesh = rm
-			r.material_override = rock
-			r.position.y = s * 0.3
-			r.rotation.y = rng.randf() * TAU
-			deco.add_child(r)
-		for child in deco.get_children():
-			child.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		root.add_child(deco)
+		var prop = Art.prop(pick[0], width, HILL_TINT if pick[0].begins_with("hills") else Color(1, 1, 1))
+		prop.position = p
+		prop.rotation.y = rng.randf() * TAU
+		root.add_child(prop)
+		placed += 1

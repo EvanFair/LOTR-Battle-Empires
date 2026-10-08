@@ -49,6 +49,7 @@ func _ready():
 	for region in navigation.find_children("*", "NavigationRegion3D", true, false):
 		region.navigation_mesh = region.navigation_mesh.duplicate()
 	_setup_subsystems_dependent_on_map()
+	_setup_atmosphere()
 	_squads_root = Node.new()
 	_squads_root.name = "Squadrons"
 	add_child(_squads_root)
@@ -73,6 +74,62 @@ func _ready():
 	Network.peer_left.connect(_on_peer_left)
 	Network.host_left.connect(_on_host_left)
 	MatchSignals.match_started.emit()
+
+
+# --- look and feel ----------------------------------------------------------------------------
+const BASE_GROUND = {
+	"gondor": Color("7d806f"), "rohan": Color("6f8a3f"), "mordor": Color("3b302b"),
+	"isengard": Color("54493d"), "eldar": Color("8fa35a"), "dwarves": Color("8a8070"),
+	"harad": Color("c2a46b"), "wild": Color("4f7a35"),
+}
+
+
+func _setup_atmosphere():
+	# open-rts's ground-fog overlay tints everything near the ground beige; we don't want it
+	var ground_fog = get_node_or_null("Fog")
+	if ground_fog != null:
+		ground_fog.visible = false
+	# unexplored land is a dark slate rather than a black void
+	var overlay = fog_of_war.find_child("ScreenOverlay")
+	if overlay != null and overlay.material_override != null:
+		overlay.material_override.set_shader_parameter("color", Color(0.06, 0.07, 0.1))
+	var env = $WorldEnvironment.environment.duplicate()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.06, 0.07, 0.1)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.62, 0.6, 0.66)
+	env.ambient_light_energy = 0.32
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 0.85
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 1.12
+	env.adjustment_contrast = 1.06
+	$WorldEnvironment.environment = env
+	var sun = $DirectionalLight3D
+	sun.light_color = Color(1.0, 0.93, 0.8)
+	sun.light_energy = 0.85
+	sun.rotation_degrees = Vector3(-52, 35, 0)
+	sun.directional_shadow_max_distance = 70.0
+	# each base sits on ground that suits its people
+	var spawns = MapGen.spawn_points()
+	for slot in match_settings.slots.size():
+		var slot_data = match_settings.slots[slot]
+		if slot_data.kind == "open":
+			continue
+		var disc = MeshInstance3D.new()
+		var mesh = CylinderMesh.new()
+		mesh.top_radius = GameData.BASE_RADIUS + 1.0
+		mesh.bottom_radius = GameData.BASE_RADIUS + 1.0
+		mesh.height = 0.02
+		mesh.radial_segments = 48
+		disc.mesh = mesh
+		var mat = StandardMaterial3D.new()
+		mat.albedo_color = BASE_GROUND.get(slot_data.faction, Color("6f8a3f"))
+		mat.roughness = 1.0
+		disc.material_override = mat
+		disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		disc.position = spawns[slot] + Vector3(0, 0.02, 0)
+		map.find_child("Decorations").add_child(disc)
 
 
 func _start_host_simulation():

@@ -48,7 +48,12 @@ void fragment()
   float depth = textureLod(depth_texture, SCREEN_UV, 0.0).x;
   // transform depth from <0; 1> value to corresponding point in projection space <-1,-1,0; 1,1,1>*
   // * note that projection space in Vulkan is different than in OpenGL
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+  // OpenGL stores depth in <0; 1> but its projection space spans <-1; 1>
+  vec3 normalized_device_coordinates = vec3(SCREEN_UV * 2.0 - 1.0, depth * 2.0 - 1.0);
+#else
   vec3 normalized_device_coordinates = vec3(SCREEN_UV * 2.0 - 1.0, depth);
+#endif
   // move depth point from projection space to world space
   // * note that INV_PROJECTION_MATRIX is broken atm. so, let's use inverse(PROJECTION_MATRIX)
   vec4 world_position =

@@ -103,7 +103,15 @@ func set_dead(value: bool):
 	if dead == value:
 		return
 	dead = value
-	find_child("Geometry").visible = not dead
+	if anim_driver != null and anim_driver.player != null:
+		# the hero falls and lies where they died until the respawn timer runs out
+		anim_driver.locked = dead
+		if dead:
+			anim_driver.player.play("Death_A", 0.1)
+		else:
+			anim_driver.player.play("Idle")
+	else:
+		find_child("Geometry").visible = not dead
 	find_child("HealthBar").visible = false
 	input_ray_pickable = not dead
 	if dead:

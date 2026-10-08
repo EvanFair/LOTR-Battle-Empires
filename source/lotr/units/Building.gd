@@ -45,7 +45,7 @@ func _ready():
 	_label3d.font_size = 40
 	_label3d.outline_size = 10
 	_label3d.pixel_size = 0.01
-	_label3d.position.y = 3.6 if building_key != "watchtower" else 6.6
+	_label3d.position.y = get_meta("model_height", 3.2) + 1.0
 	add_child(_label3d)
 	trains = GameData.BUILDINGS[building_key].get("trains", "")
 	auto_acquire = attack_damage != null
@@ -115,12 +115,29 @@ func _finish_construction():
 	MatchSignals.unit_construction_finished.emit(self)
 
 
+var _model_base_scale_y = -1.0
+
+
 func _apply_construction_look(under_construction: bool):
 	var geometry = find_child("Geometry")
 	if geometry == null:
 		return
+	var model = geometry.get_node_or_null("BuildingModel")
+	var scaffold = geometry.get_node_or_null("Scaffold")
+	if under_construction and model != null and scaffold == null:
+		scaffold = Art.prop("building_scaffolding", stats_size() * 2.0)
+		scaffold.name = "Scaffold"
+		geometry.add_child(scaffold)
+	elif not under_construction and scaffold != null:
+		scaffold.queue_free()
+	if model != null:
+		if _model_base_scale_y < 0.0:
+			_model_base_scale_y = model.scale.y
+		if not under_construction:
+			model.scale.y = _model_base_scale_y
 	for node in geometry.find_children("*", "MeshInstance3D", true, false):
-		node.transparency = UNDER_CONSTRUCTION_ALPHA if under_construction else 0.0
+		if scaffold == null or not scaffold.is_ancestor_of(node):
+			node.transparency = UNDER_CONSTRUCTION_ALPHA if under_construction else 0.0
 
 
 func cancel_construction():
@@ -138,6 +155,10 @@ func cancel_construction():
 func _process(_delta):
 	if _label3d == null:
 		return
+	if not is_constructed() and _model_base_scale_y > 0.0:
+		var model = find_child("Geometry").get_node_or_null("BuildingModel")
+		if model != null:
+			model.scale.y = _model_base_scale_y * (0.2 + 0.8 * progress)
 	var text = ""
 	if not is_constructed():
 		text = "%d%%" % int(progress * 100)

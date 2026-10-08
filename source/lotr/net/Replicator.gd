@@ -11,6 +11,7 @@ const CLIENT_READY_TIMEOUT = 20.0
 const SNAP_DISTANCE = 6.0
 const LERP_SPEED = 14.0
 const FLAG_HIDDEN = 1
+const FLAG_ATTACKING = 2
 
 signal all_clients_ready
 
@@ -130,6 +131,8 @@ func _send_fast():
 		var flags = 0
 		if (unit.unit_kind == "villager" and unit.is_sheltered()) or (unit.unit_kind == "hero" and unit.dead):
 			flags |= FLAG_HIDDEN
+		if GameData.now() - unit.last_attack_at < FAST_INTERVAL + 0.02:
+			flags |= FLAG_ATTACKING
 		data.append(unit.net_id)
 		data.append(unit.global_position.x)
 		data.append(unit.global_position.z)
@@ -241,6 +244,8 @@ func _rpc_fast(data: PackedFloat32Array, fx_list):
 			if unit.hp != new_hp and new_hp > 0:
 				unit.hp = new_hp
 			var hidden = (int(data[i + 5]) & FLAG_HIDDEN) != 0
+			if (int(data[i + 5]) & FLAG_ATTACKING) != 0 and GameData.now() - unit.last_attack_at > 0.3:
+				unit.notify_attack()
 			if unit.unit_kind == "villager":
 				unit.find_child("Geometry").visible = not hidden
 		i += 6
