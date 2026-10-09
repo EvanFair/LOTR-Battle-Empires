@@ -40,6 +40,9 @@ var _camera = null
 var _ghost = null
 
 const IndicatorsScript = preload("res://source/lotr/hud/Indicators.gd")
+const Cursors = preload("res://source/lotr/hud/widgets/Cursors.gd")
+
+var _cursor_left = 0.0
 
 
 func _ready():
@@ -66,7 +69,11 @@ func _submit(cmd: Dictionary):
 
 
 # --- camera -----------------------------------------------------------------------------------
-func _process(_delta):
+func _process(delta):
+	_cursor_left -= delta
+	if _cursor_left <= 0.0:
+		_cursor_left = 0.08
+		Cursors.update(self)
 	var h = hero()
 	if camera_locked and h != null and h.is_alive():
 		_camera.set_position_safely(h.global_position)

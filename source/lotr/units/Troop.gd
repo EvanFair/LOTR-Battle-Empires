@@ -36,5 +36,5 @@ func _try_hit(target):
 		match_node.fx("blast", global_position, global_position)
 	for other in Combat.enemies_in_radius(self, global_position, EXPLODE_RADIUS + _target_radius(target), get_tree()):
 		var falloff = 1.0 if other == target or other.unit_kind == "building" else 0.5
-		Combat.deal_damage(self, other, attack_damage * damage_mult * falloff)
+		Combat.deal_damage(self, other, attack_damage * damage_mult * falloff, Combat.PHYSICAL, Combat.BASIC, ["aoe", "siege"])
 	hp = 0

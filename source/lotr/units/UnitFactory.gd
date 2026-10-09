@@ -70,7 +70,6 @@ static func _create_troop(params):
 	unit.unit_class = stats.counter_as  # which column of the counter table it attacks with
 	unit.target_kind = stats.counter_as if stats.counter_as in GameData.TARGET_KINDS else "infantry"
 	unit.display_name = stats.name
-	unit.armor = stats.armor
 	unit.siege = stats.siege
 	unit.explode = stats.explode
 	var geometry = _geometry(unit)
@@ -117,7 +116,6 @@ static func _create_creature(params):
 	unit.target_kind = unit.unit_class
 	unit.creature_key = params.creature
 	unit.display_name = data.name
-	unit.armor = data.get("armor", 0.0)
 	var geometry = _geometry(unit)
 	match params.creature:
 		"deer":
@@ -238,7 +236,7 @@ static func _finish_mobile(unit, stats, bar_height):
 # --- buildings --------------------------------------------------------------------------------
 static func _create_building(params):
 	var data = GameData.BUILDINGS[params.building]
-	var stats = {"hp": data.hp, "sight": data.sight}
+	var stats = {"hp": data.hp, "sight": data.sight, "armor": 0.2}
 	if data.has("attack"):
 		stats["damage"] = data.attack.damage
 		stats["interval"] = data.attack.interval
@@ -250,7 +248,6 @@ static func _create_building(params):
 	unit.target_kind = "building"
 	unit.building_key = params.building
 	unit.display_name = data.name
-	unit.armor = 0.2
 	var geometry = _geometry(unit)
 	if data.get("wall", false):
 		return _finish_wall(unit, geometry, params, data)
@@ -391,7 +388,7 @@ static func _new_unit(script, params, stats):
 	unit.collision_layer = 2
 	unit.collision_mask = 0
 	unit.spawn_params = params
-	unit.stats = stats
+	unit.base_stats = stats
 	return unit
 
 

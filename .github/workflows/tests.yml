@@ -26,6 +26,10 @@ jobs:
 
       # Godot prints thousands of harmless shutdown messages in headless mode, so each step keeps the
       # full output in test.log (uploaded if anything fails) and shows only the test report lines.
+      - name: Combat (stats, buffs, damage pipeline, crowd control)
+        shell: bash -o pipefail {0}
+        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/CombatTest.tscn 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
+
       - name: Bot match (team)
         shell: bash -o pipefail {0}
         run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"

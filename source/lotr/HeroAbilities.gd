@@ -5,7 +5,9 @@ class_name HeroAbilities
 ## Kinds: strike / execute_strike / pin_shot (one enemy), nova (around the hero),
 ## ground_aoe (circle at a point), skillshot (line), leap / dash (move), buff_self,
 ## heal_allies / rally_aura / team_haste (allies around the hero), summon.
-## Effects any kind may carry: damage, stun, root, slow + slow_time, weaken (enemy damage mult).
+## Effects any kind may carry: damage (+ ap_ratio x ability power), damage_type ("magic" or default
+## physical), stun, root, slow + slow_time, weaken (enemy damage mult). They go through Combat.deal_damage
+## and the target's BuffManager, so armour, tenacity, diminishing returns and immunity all apply.
 
 # how each ability kind is aimed (drives the client's indicators and target picking)
 const AIM_MODES = {
@@ -38,8 +40,8 @@ static func cast(match_node, hero, key: String, target_pos, target_unit) -> Stri
 		return "%s is on cooldown (%ds)" % [ability.name, ceili(hero.cooldown_left(key))]
 	if hero.mana < ability.mana:
 		return "Not enough mana for %s" % ability.name
-	if hero.is_stunned():
-		return "You are stunned"
+	if not hero.status.can_cast:
+		return "You are stunned" if hero.is_stunned() else ("You are silenced" if hero.status.silenced else "You cannot cast right now")
 	var result = ""
 	match ability.kind:
 		"execute_strike", "strike", "pin_shot":
@@ -66,39 +68,45 @@ static func cast(match_node, hero, key: String, target_pos, target_unit) -> Stri
 			result = "Unknown ability"
 	if result == "":
 		hero.mana -= ability.mana
-		hero.cooldowns[key] = GameData.now() + ability.cooldown
+		hero.cooldowns[key] = GameData.now() + ability.cooldown * hero.stats.cooldown_scale()
 		hero.notify_cast(ability.kind not in ["dash", "leap"])
+		hero.bm.fire_cast(key)
 		match_node.fx("cast", hero.global_position, hero.global_position)
 	return result
 
 
 # --- effects ------------------------------------------------------------------------------------
 static func hit(hero, target, ability: Dictionary, mult = 1.0):
-	"""Apply an ability's damage and crowd control to one enemy."""
+	"""Apply an ability's damage and crowd control to one enemy. Damage goes through the Combat
+	pipeline: "damage_type": "magic" abilities hit magic resist, everything else armour."""
 	if target == null or not is_instance_valid(target) or not target.is_alive():
 		return
 	var damage = ability.get("damage", 0.0) * mult
+	damage += ability.get("ap_ratio", 0.0) * hero.stats.ability_power * mult
+	var dtype = Combat.MAGIC if ability.get("damage_type", "physical") == "magic" else Combat.PHYSICAL
+	var tags = ["no_counter"]
+	if ability.kind in ["nova", "ground_aoe", "leap"]:
+		tags.append("aoe")
 	if target.unit_kind == "hero":
 		damage *= ability.get("hero_bonus", 1.0)
 	if target.unit_kind == "building":
 		damage *= ability.get("building_mult", 0.5)
-		Combat.deal_damage(hero, target, damage, true)
+		Combat.deal_damage(hero, target, damage, dtype, Combat.SPELL, tags)
 		return  # buildings can't be stunned or slowed
 	if ability.has("missing_hp_bonus"):
 		damage += (target.hp_max - target.hp) * ability.missing_hp_bonus
 	if damage > 0.0:
-		Combat.deal_damage(hero, target, damage, true)
+		Combat.deal_damage(hero, target, damage, dtype, Combat.SPELL, tags)
 	if not target.is_alive():
 		return
-	var now = GameData.now()
 	if ability.has("stun"):
-		target.stun(ability.stun)
+		target.bm.add(StunBuff.new(), hero, ability.stun)
 	if ability.has("root"):
-		target.rooted_until = max(target.rooted_until, now + ability.root)
+		target.bm.add(RootBuff.new(), hero, ability.root)
 	if ability.has("slow"):
-		target.apply_buff("speed", ability.slow, ability.get("slow_time", 2.0))
+		target.bm.add(SlowBuff.new(1.0 - ability.slow), hero, ability.get("slow_time", 2.0))
 	if ability.has("weaken"):
-		target.apply_buff("damage", ability.weaken, ability.get("slow_time", 4.0))
+		target.bm.add(StatModBuff.new("mod_damage_down", ability.get("slow_time", 4.0)).best_mult("attack_damage", ability.weaken), hero)
 
 
 static func _enemy_target(hero, target_unit, reach) -> String:
@@ -189,6 +197,8 @@ static func _move_hero_to(hero, target_pos, distance, time = 0.18):
 	dir.y = 0
 	if dir.length() < 0.5:
 		return "Too close"
+	if hero.status.grounded:
+		return "You cannot dash right now"
 	if hero.is_rooted():
 		return "You are rooted"
 	var dest = hero.global_position + dir.normalized() * min(dir.length(), distance)
@@ -228,9 +238,9 @@ static func _leap(match_node, hero, ability, target_pos):
 
 static func _buff_self(hero, ability):
 	for stat in ability.get("buffs", {}):
-		hero.apply_buff(stat, ability.buffs[stat], ability.duration)
+		hero.apply_buff(stat, ability.buffs[stat], ability.duration, hero)
 	if ability.has("heal"):
-		hero.hp = min(hero.hp_max, hero.hp + int(ability.heal))
+		Combat.heal(hero, hero, float(ability.heal))
 	return ""
 
 
@@ -245,11 +255,11 @@ static func _rally(match_node, hero, ability):
 			if unit.unit_kind != "troop" and not is_hero:
 				continue
 			if ability.has("heal"):
-				unit.hp = min(unit.hp_max, unit.hp + int(ability.heal))
+				Combat.heal(hero, unit, float(ability.heal))
 			if ability.has("stat") and (not is_hero or ability.get("heroes_too", false) or unit == hero):
-				unit.apply_buff(ability.stat, ability.mult, ability.duration)
+				unit.apply_buff(ability.stat, ability.mult, ability.duration, hero)
 		elif ability.has("enemy_slow") and unit.unit_kind != "building":
-			unit.apply_buff("speed", ability.enemy_slow, ability.duration * 0.5)
+			unit.apply_buff("speed", ability.enemy_slow, ability.duration * 0.5, hero)
 	return ""
 
 
@@ -283,8 +293,8 @@ static func _team_haste(match_node, hero, ability):
 		if unit.unit_kind not in ["troop", "hero"]:
 			continue
 		if unit.global_position.distance_to(hero.global_position) <= ability.radius:
-			unit.apply_buff("speed", ability.speed, ability.duration)
+			unit.apply_buff("speed", ability.speed, ability.duration, hero)
 			if ability.has("damage_mult"):
-				unit.apply_buff("damage", ability.damage_mult, ability.duration)
-			unit.rooted_until = 0.0  # cleanse
+				unit.apply_buff("damage", ability.damage_mult, ability.duration, hero)
+			unit.bm.cleanse(Buff.ROOT)  # shrugs off roots
 	return ""

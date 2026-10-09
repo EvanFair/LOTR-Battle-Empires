@@ -12,7 +12,8 @@
 | `source/lotr/GameData.gd` | All data: factions, heroes (abilities with ranks), buildings, units, items, creatures, ages, costs. Autoload `GameData`; `GameData.now()` is the game clock. |
 | `source/lotr/LotrMatch.gd` | Host match logic: players and team banks, spawning, commands (`CommandBus.register("type", _cmd_x)`), camps, forgotten towers, win check, income. |
 | `source/lotr/LotrPlayer.gd` | Per player. `treasury()` is the team bank. `supplies`, `has_resources`, `subtract_resources`, `log_spend`; `age` and `upgrades` are shared through the bank. |
-| `source/lotr/Combat.gd` | Damage, rewards, target priority (`pick_target`). |
+| `source/lotr/Combat.gd` | `deal_damage(src, target, amount, type, source_kind, tags)` pipeline, `heal`, `shield`, assist credit (`assists_for`), kill rewards, target priority (`pick_target`). |
+| `source/lotr/combat/` | v4 plan A1-A5. `Stats.gd` (layers, armour maths), `Status.gd` (flags), `Buff.gd` + `BuffSlot.gd` + `BuffManager.gd` (add types, crowd-control rules, shields), `DamageCtx.gd`, and one script per reusable buff in `buffs/`. Every unit has `unit.stats`, `unit.status`, `unit.bm`. Apply a buff: `target.bm.add(StunBuff.new(1.2), source)`; read a stat: `unit.stats.armour`; check state: `unit.status.can_cast`. The old fields (`armor`, `speed_mult`, `stunned_until`, `buffs`, `apply_buff`) are read-only shims. Tests: `tests/auto/CombatTest.tscn`. |
 | `source/lotr/HeroAbilities.gd` | Ability kinds (strike, nova, skillshot, ...). Replaced by Spell scripts in M2. |
 | `source/lotr/units/` | `LotrUnit.gd` (base: hp, buffs, attacks, stun/root), `Hero.gd`, `Troop.gd`, `Villager.gd`, `Creature.gd`, `Building.gd`, `UnitFactory.gd` (builds nodes/models). |
 | `source/lotr/Squadron.gd` | Squads: orders, follow, march. |
@@ -31,6 +32,7 @@
 - **Tests:** run the .tscn, not the .gd, so autoloads load.
   - `timeout 600 $G --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6` (3v3 bots; RESULT: PASS/FAIL)
   - `res://tests/auto/RulesTest.tscn` (rules)
+  - `res://tests/auto/CombatTest.tscn` (stats, buffs, damage pipeline, crowd control; RESULT: PASS/FAIL)
   - `res://tests/auto/LanTest.tscn -- --role=host|client --seconds=30` (run both at once; see `.github/workflows/tests.yml`)
 - **Screenshots** need xvfb and GL: `xvfb-run -a $G --rendering-driver opengl3 --resolution 1600x900 --path . res://tests/auto/V3Shot.tscn -- --out=/some/dir`
 - **Noise to ignore:** headless runs print shader errors "Unknown character #35" (pre-existing fog shaders), "Parameter m is null" and RID leak messages at exit.

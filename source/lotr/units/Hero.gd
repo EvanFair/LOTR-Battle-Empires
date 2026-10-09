@@ -11,6 +11,11 @@ var xp = 0
 var mana = 0.0
 var mana_max = 0.0
 var mana_regen = 2.0
+var hp_regen = 0.0  # per second, from Stats
+var ability_power = 0.0
+var ability_haste = 0.0
+var crit_chance = 0.0
+var magic_resist = 0.0  # damage reduction fraction (stats.magic_resist is in points)
 var dead = false
 var respawn_at = 0.0
 var cooldowns = {}  # ability key -> time (s) when ready again
@@ -20,20 +25,15 @@ var pending_cast = null  # {key, target}: walking into range of a unit-target ab
 var home_position = Vector3.ZERO
 var recall_until = 0.0  # > 0 while channelling Recall
 var _recall_hp = 0
+var _hp_carry = 0.0
 
 const RECALL_TIME = 6.0
 
 
 func _ready():
 	await super()
-	var data = GameData.HEROES[hero_key]
-	mana_max = data.mana
-	mana = mana_max
-	mana_regen = data.get("mana_regen", 2.0)
 	auto_acquire = false  # heroes only fight when told to (or when attacked, see below)
 	home_position = global_position
-	if not puppet:
-		recompute_stats()  # applies the legend/captain tier from level 1
 
 
 func is_alive():
@@ -115,22 +115,91 @@ func item_bonus(stat: String) -> float:
 
 
 func recompute_stats():
-	"""Level stats plus items. Keeps current HP/mana, adding any max increase."""
+	"""Level, items and buffs into Stats (keeps current HP/mana, adding any max increase)."""
+	rebuild_stats()
+
+
+func _stat_level() -> int:
+	return level
+
+
+func _seed_stats():
+	"""Base + growth per level from GameData.HEROES (legends get the tier bonus)."""
 	var data = GameData.HEROES[hero_key]
-	var s = GameData.hero_stats_at_level(hero_key, level)
-	var new_hp_max = int(s.hp + item_bonus("hp"))
-	hp = clampi(hp + max(0, new_hp_max - hp_max), 1 if hp > 0 else 0, new_hp_max)
-	hp_max = new_hp_max
-	attack_damage = s.damage + item_bonus("damage")
-	var new_mana_max = data.mana + item_bonus("mana")
-	mana = min(new_mana_max, mana + max(0.0, new_mana_max - mana_max))
-	mana_max = new_mana_max
-	mana_regen = data.get("mana_regen", 2.0) + item_bonus("mana_regen")
-	attack_speed_bonus = item_bonus("attack_speed")
-	speed_bonus = item_bonus("speed")
-	_apply_speed()
-	_base_armor = min(0.6, item_bonus("armor"))
-	_recompute_buffs()
+	var tier = GameData.LEGEND_BONUS if data.get("tier", "captain") == "legend" else 1.0
+	stats.set_base("max_hp", data.hp * tier, data.hp_per_level * tier)
+	stats.set_base("attack_damage", data.damage * tier, data.damage_per_level * tier)
+	stats.set_base("attack_speed", 1.0 / maxf(0.05, data.interval))
+	stats.set_base("attack_range", data.range)
+	stats.set_base("move_speed", data.speed)
+	stats.set_base("max_mana", data.mana)
+	stats.set_base("mana_regen", data.get("mana_regen", 2.0))
+	stats.set_base("hp_regen", data.get("hp_regen", 0.0))
+	stats.set_base("armour", data.get("armour", 0.0))
+	stats.set_base("magic_resist", data.get("magic_resist", 0.0))
+	stats.set_base("ability_power", data.get("ability_power", 0.0))
+
+
+func _contribute_stats(s):
+	"""Items into the temp layer (old item stat keys: hp, mana, mana_regen, damage, attack_speed and
+	speed are fractions/flats as before; armor is a damage-reduction fraction capped at 60%;
+	mr, ap, armour, hp_regen, lifesteal, tenacity, ability_haste and crit are the v4 additions)."""
+	var armor_fraction = 0.0
+	for it in items:
+		var st = GameData.ITEMS[it.key].get("stats", {})
+		for k in st:
+			var v = st[k]
+			match k:
+				"hp":
+					s.add_flat(Stats.S.MAX_HP, v)
+				"mana":
+					s.add_flat(Stats.S.MAX_MANA, v)
+				"mana_regen":
+					s.add_flat(Stats.S.MANA_REGEN, v)
+				"hp_regen":
+					s.add_flat(Stats.S.HP_REGEN, v)
+				"damage":
+					s.add_flat(Stats.S.ATTACK_DAMAGE, v)
+				"attack_speed":
+					s.add_percent(Stats.S.ATTACK_SPEED, v)
+				"speed":
+					s.add_percent(Stats.S.MOVE_SPEED, v)
+				"armor":
+					armor_fraction += v
+				"armour":
+					s.add_flat(Stats.S.ARMOUR, v)
+				"mr":
+					s.add_flat(Stats.S.MAGIC_RESIST, v)
+				"ap":
+					s.add_flat(Stats.S.ABILITY_POWER, v)
+				"lifesteal":
+					s.add_flat(Stats.S.LIFESTEAL, v)
+				"tenacity":
+					s.add_flat(Stats.S.TENACITY, v)
+				"ability_haste":
+					s.add_flat(Stats.S.ABILITY_HASTE, v)
+				"crit":
+					s.add_flat(Stats.S.CRIT_CHANCE, v)
+	if armor_fraction > 0.0:
+		s.add_flat(Stats.S.ARMOUR, Stats.points_from_fraction(minf(0.6, armor_fraction)))
+
+
+func _sync_extra(first):
+	var new_max = stats.max_mana
+	if first or not _synced.has("mana"):
+		mana_max = new_max
+		mana = mana_max
+	elif new_max != _synced.mana:
+		var diff = new_max - _synced.mana
+		mana_max += diff
+		mana = min(mana_max, mana + max(0.0, diff))
+	_synced.mana = new_max
+	mana_regen = stats.mana_regen
+	hp_regen = stats.hp_regen
+	ability_power = stats.ability_power
+	ability_haste = stats.ability_haste
+	crit_chance = stats.crit_chance
+	magic_resist = stats.magic_fraction()
 
 
 # --- items (host) ---------------------------------------------------------------------------------
@@ -167,7 +236,7 @@ func use_item(slot: int) -> String:
 	var now = GameData.now()
 	if data.get("consumable", false):
 		var use = data.use
-		hp = min(hp_max, hp + int(use.get("heal", 0)))
+		Combat.heal(self, self, float(use.get("heal", 0)))
 		mana = min(mana_max, mana + use.get("mana", 0.0))
 		items.remove_at(slot)
 		_fx("respawn")
@@ -183,9 +252,9 @@ func use_item(slot: int) -> String:
 		if u.global_position.distance_to(global_position) > a.radius:
 			continue
 		if a.has("heal"):
-			u.hp = min(u.hp_max, u.hp + int(a.heal))
+			Combat.heal(self, u, float(a.heal))
 		if a.has("stat"):
-			u.apply_buff(a.stat, a.mult, a.duration)
+			u.apply_buff(a.stat, a.mult, a.duration, self)
 	it.ready_at = now + a.cooldown
 	var match_node = get_tree().get_first_node_in_group("lotr_match")
 	match_node.fx("nova", global_position, global_position + Vector3(a.radius, 0, 0))
@@ -202,6 +271,11 @@ func _physics_process(delta):
 			_respawn()
 		return
 	mana = min(mana_max, mana + mana_regen * delta)
+	if hp_regen > 0.0 and hp < hp_max:
+		_hp_carry += hp_regen * bm.heal_mod() * delta
+		if _hp_carry >= 1.0:
+			hp = min(hp_max, hp + int(_hp_carry))
+			_hp_carry -= int(_hp_carry)
 	_fountain_tick(delta)
 	if recall_until > 0.0:
 		_recall_tick()
@@ -266,6 +340,7 @@ func _process_idle(delta):
 func _handle_unit_death():
 	if dead:
 		return
+	_on_death_common()
 	set_dead(true)
 	if not puppet:
 		respawn_at = GameData.now() + GameData.hero_respawn_time(level)
@@ -293,8 +368,9 @@ func set_dead(value: bool):
 	input_ray_pickable = not dead
 	if dead:
 		order_stop()
-		buffs.clear()
-		_recompute_buffs()
+		if not puppet:
+			bm.clear_all(true)
+			rebuild_stats()
 	death_state_changed.emit(dead)
 
 
@@ -353,6 +429,7 @@ func _recall_tick():
 	if hp < _recall_hp or order != Order.IDLE:
 		cancel_recall()  # taking damage or any order breaks the channel
 		return
+	_recall_hp = hp  # regeneration raises the bar, so a hit still breaks it
 	if GameData.now() < recall_until:
 		return
 	cancel_recall()

@@ -205,7 +205,8 @@ func _send_slow():
 				"id": h.net_id, "level": h.level, "xp": h.xp, "mana": h.mana, "mana_max": h.mana_max,
 				"hp_max": h.hp_max, "dead": h.dead, "respawn": max(0.0, h.respawn_at - now),
 				"cds": cds, "recall": h.recall_left(), "ranks": h.ranks,
-				"stun": max(0.0, h.stunned_until - now),
+				"stun": max(0.0, h.stunned_until - now), "root": max(0.0, h.rooted_until - now),
+				"flags": h.status.to_mask(), "buffs": h.bm.to_net(),
 				"items": h.items.map(func(it): return [it.key, max(0.0, it.ready_at - now)]),
 			}
 		)
@@ -332,6 +333,9 @@ func _rpc_slow(players, heroes, buildings, squad_list, resources, towers = []):
 		h.recall_until = now + hd.recall if hd.recall > 0.0 else 0.0
 		h.ranks = hd.ranks
 		h.stunned_until = now + hd.stun
+		h.rooted_until = now + hd.get("root", 0.0)
+		h.status.from_mask(hd.get("flags", 0))
+		h.bm.set_net(hd.get("buffs", []))
 		h.items = hd.items.map(func(it): return {"key": it[0], "ready_at": now + it[1]})
 	for bd in buildings:
 		var b = _match.by_net_id(bd.id)

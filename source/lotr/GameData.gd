@@ -198,7 +198,7 @@ const HEROES = {
 	{
 		"tier": "legend", "name": "Aragorn", "faction": "gondor", "role": "Fighter",
 		"hp": 650, "mana": 200, "damage": 28, "interval": 1.0, "range": 1.8, "speed": 4.0,
-		"sight": 12.0, "hp_per_level": 70, "damage_per_level": 4, "mana_regen": 0.8,
+		"sight": 12.0, "hp_per_level": 70, "damage_per_level": 4, "mana_regen": 0.8, "armour": 10, "magic_resist": 25, "ability_power": 0, "hp_regen": 0.5,
 		"abilities":
 		[
 			{"key": "Q", "name": "Andúril Strike", "kind": "execute_strike", "cooldown": 8.0,
@@ -219,7 +219,7 @@ const HEROES = {
 	{
 		"tier": "captain", "name": "Boromir", "faction": "gondor", "role": "Vanguard",
 		"hp": 760, "mana": 180, "damage": 25, "interval": 1.05, "range": 1.8, "speed": 3.9,
-		"sight": 11.0, "hp_per_level": 85, "damage_per_level": 3, "mana_regen": 0.8,
+		"sight": 11.0, "hp_per_level": 85, "damage_per_level": 3, "mana_regen": 0.8, "armour": 15, "magic_resist": 28, "ability_power": 0, "hp_regen": 0.5,
 		"abilities":
 		[
 			{"key": "Q", "name": "Shield Bash", "kind": "strike", "cooldown": 9.0, "mana": 40,
@@ -239,7 +239,7 @@ const HEROES = {
 	{
 		"tier": "captain", "name": "Faramir", "faction": "gondor", "role": "Ranger",
 		"hp": 540, "mana": 210, "damage": 26, "interval": 1.1, "range": 7.5, "speed": 4.1,
-		"sight": 13.0, "hp_per_level": 60, "damage_per_level": 4, "mana_regen": 0.96,
+		"sight": 13.0, "hp_per_level": 60, "damage_per_level": 4, "mana_regen": 0.96, "armour": 5, "magic_resist": 22, "ability_power": 0, "hp_regen": 0.5,
 		"ranged": true,
 		"abilities":
 		[
@@ -263,10 +263,10 @@ const HEROES = {
 	{
 		"tier": "legend", "name": "Théoden", "faction": "rohan", "role": "Enchanter",
 		"hp": 600, "mana": 220, "damage": 24, "interval": 1.0, "range": 1.8, "speed": 4.2,
-		"sight": 12.0, "hp_per_level": 65, "damage_per_level": 3, "mana_regen": 1.0,
+		"sight": 12.0, "hp_per_level": 65, "damage_per_level": 3, "mana_regen": 1.0, "armour": 5, "magic_resist": 28, "ability_power": 48, "hp_regen": 0.5,
 		"abilities":
 		[
-			{"key": "Q", "name": "Herugrim", "kind": "nova", "cooldown": 8.0, "mana": 40,
+			{"key": "Q", "name": "Herugrim", "damage_type": "magic", "kind": "nova", "cooldown": 8.0, "mana": 40,
 				"radius": 3.2, "damage": 55, "desc": "A sweeping cut that hits every enemy around you."},
 			{"key": "W", "name": "Arise, Riders", "kind": "heal_allies", "cooldown": 22.0,
 				"mana": 70, "radius": 12.0, "heal": 90, "duration": 6.0, "stat": "attack_speed",
@@ -282,7 +282,7 @@ const HEROES = {
 	{
 		"tier": "captain", "name": "Éomer", "faction": "rohan", "role": "Fighter",
 		"hp": 640, "mana": 190, "damage": 27, "interval": 1.0, "range": 1.9, "speed": 4.3,
-		"sight": 12.0, "hp_per_level": 72, "damage_per_level": 4, "mana_regen": 0.8,
+		"sight": 12.0, "hp_per_level": 72, "damage_per_level": 4, "mana_regen": 0.8, "armour": 10, "magic_resist": 25, "ability_power": 0, "hp_regen": 0.5,
 		"abilities":
 		[
 			{"key": "Q", "name": "Spear Throw", "kind": "skillshot", "cooldown": 8.0, "mana": 40,
@@ -304,7 +304,7 @@ const HEROES = {
 	{
 		"tier": "captain", "name": "Éowyn", "faction": "rohan", "role": "Assassin",
 		"hp": 560, "mana": 180, "damage": 29, "interval": 0.9, "range": 1.7, "speed": 4.3,
-		"sight": 12.0, "hp_per_level": 62, "damage_per_level": 5, "mana_regen": 0.8,
+		"sight": 12.0, "hp_per_level": 62, "damage_per_level": 5, "mana_regen": 0.8, "armour": 5, "magic_resist": 25, "ability_power": 0, "hp_regen": 0.5,
 		"abilities":
 		[
 			{"key": "Q", "name": "Shieldmaiden", "kind": "execute_strike", "cooldown": 7.0,
@@ -325,7 +325,7 @@ const HEROES = {
 	{
 		"tier": "captain", "name": "Gothmog", "faction": "mordor", "role": "Vanguard",
 		"hp": 780, "mana": 180, "damage": 24, "interval": 1.1, "range": 1.8, "speed": 3.8,
-		"sight": 11.0, "hp_per_level": 90, "damage_per_level": 3, "mana_regen": 0.8,
+		"sight": 11.0, "hp_per_level": 90, "damage_per_level": 3, "mana_regen": 0.8, "armour": 15, "magic_resist": 30, "ability_power": 0, "hp_regen": 0.5,
 		"abilities":
 		[
 			{"key": "Q", "name": "Cleave", "kind": "nova", "cooldown": 8.0, "mana": 35,
@@ -345,19 +345,19 @@ const HEROES = {
 	{
 		"tier": "legend", "name": "Witch-king", "faction": "mordor", "role": "Enchanter",
 		"hp": 600, "mana": 240, "damage": 27, "interval": 1.1, "range": 1.9, "speed": 4.0,
-		"sight": 13.0, "hp_per_level": 68, "damage_per_level": 4, "mana_regen": 1.04,
+		"sight": 13.0, "hp_per_level": 68, "damage_per_level": 4, "mana_regen": 1.04, "armour": 5, "magic_resist": 30, "ability_power": 54, "hp_regen": 0.5,
 		"abilities":
 		[
-			{"key": "Q", "name": "Morgul Blade", "kind": "strike", "cooldown": 8.0, "mana": 45,
+			{"key": "Q", "name": "Morgul Blade", "damage_type": "magic", "kind": "strike", "cooldown": 8.0, "mana": 45,
 				"range": 2.4, "damage": 60, "slow": 0.55, "slow_time": 3.0,
 				"desc": "A cursed wound: damage and a heavy slow."},
-			{"key": "W", "name": "Black Breath", "kind": "nova", "cooldown": 14.0, "mana": 60,
+			{"key": "W", "name": "Black Breath", "damage_type": "magic", "kind": "nova", "cooldown": 14.0, "mana": 60,
 				"radius": 6.0, "damage": 40, "slow": 0.6, "slow_time": 3.0, "weaken": 0.75,
 				"desc": "Enemies around you are slowed and deal 25% less damage."},
-			{"key": "E", "name": "Fell Beast", "kind": "leap", "cooldown": 14.0, "mana": 50,
+			{"key": "E", "name": "Fell Beast", "damage_type": "magic", "kind": "leap", "cooldown": 14.0, "mana": 50,
 				"distance": 11.0, "radius": 2.5, "damage": 35,
 				"desc": "Swoop to a distant point on your fell beast."},
-			{"key": "R", "name": "Dread Shriek", "kind": "nova", "cooldown": 80.0, "mana": 130,
+			{"key": "R", "name": "Dread Shriek", "damage_type": "magic", "kind": "nova", "cooldown": 80.0, "mana": 130,
 				"radius": 14.0, "damage": 70, "stun": 1.6, "weaken": 0.6, "slow_time": 6.0,
 				"desc": "Every enemy in a wide area is stunned and weakened."},
 		],
@@ -366,7 +366,7 @@ const HEROES = {
 	{
 		"tier": "legend", "name": "Shelob", "faction": "mordor", "role": "Diver",
 		"hp": 700, "mana": 170, "damage": 30, "interval": 1.0, "range": 1.9, "speed": 4.4,
-		"sight": 11.0, "hp_per_level": 78, "damage_per_level": 5, "mana_regen": 0.8,
+		"sight": 11.0, "hp_per_level": 78, "damage_per_level": 5, "mana_regen": 0.8, "armour": 10, "magic_resist": 28, "ability_power": 0, "hp_regen": 0.5,
 		"abilities":
 		[
 			{"key": "Q", "name": "Sting", "kind": "strike", "cooldown": 9.0, "mana": 40,
@@ -386,7 +386,7 @@ const HEROES = {
 	{
 		"tier": "captain", "name": "Uglúk", "faction": "isengard", "role": "Vanguard",
 		"hp": 770, "mana": 170, "damage": 26, "interval": 1.05, "range": 1.8, "speed": 3.9,
-		"sight": 11.0, "hp_per_level": 88, "damage_per_level": 3, "mana_regen": 0.8,
+		"sight": 11.0, "hp_per_level": 88, "damage_per_level": 3, "mana_regen": 0.8, "armour": 15, "magic_resist": 30, "ability_power": 0, "hp_regen": 0.5,
 		"abilities":
 		[
 			{"key": "Q", "name": "Cleave", "kind": "nova", "cooldown": 8.0, "mana": 35,
@@ -405,19 +405,19 @@ const HEROES = {
 	{
 		"tier": "legend", "name": "Saruman", "faction": "isengard", "role": "Caster",
 		"hp": 520, "mana": 260, "damage": 24, "interval": 1.2, "range": 7.0, "speed": 3.9,
-		"sight": 13.0, "hp_per_level": 55, "damage_per_level": 4, "mana_regen": 1.2,
+		"sight": 13.0, "hp_per_level": 55, "damage_per_level": 4, "mana_regen": 1.2, "armour": 0, "magic_resist": 30, "ability_power": 48, "hp_regen": 0.5,
 		"ranged": true,
 		"abilities":
 		[
-			{"key": "Q", "name": "Fireball", "kind": "ground_aoe", "cooldown": 7.0, "mana": 45,
+			{"key": "Q", "name": "Fireball", "damage_type": "magic", "kind": "ground_aoe", "cooldown": 7.0, "mana": 45,
 				"range": 12.0, "radius": 2.5, "damage": 85, "fx": "blast",
 				"desc": "Hurl fire at an area."},
-			{"key": "W", "name": "Voice of Saruman", "kind": "nova", "cooldown": 16.0, "mana": 60,
+			{"key": "W", "name": "Voice of Saruman", "damage_type": "magic", "kind": "nova", "cooldown": 16.0, "mana": 60,
 				"radius": 7.0, "damage": 20, "stun": 1.4, "desc": "Enemies around you are spellbound."},
-			{"key": "E", "name": "Staff Blast", "kind": "skillshot", "cooldown": 9.0, "mana": 45,
+			{"key": "E", "name": "Staff Blast", "damage_type": "magic", "kind": "skillshot", "cooldown": 9.0, "mana": 45,
 				"range": 11.0, "width": 1.4, "damage": 70, "pierce": true,
 				"desc": "A bolt that hits every enemy in a line."},
-			{"key": "R", "name": "Fire of Orthanc", "kind": "ground_aoe", "cooldown": 80.0,
+			{"key": "R", "name": "Fire of Orthanc", "damage_type": "magic", "kind": "ground_aoe", "cooldown": 80.0,
 				"mana": 140, "range": 14.0, "radius": 5.0, "damage": 240, "building_mult": 2.0,
 				"fx": "blast", "desc": "A huge blast that also wrecks buildings."},
 		],
@@ -426,7 +426,7 @@ const HEROES = {
 	{
 		"tier": "captain", "name": "Lurtz", "faction": "isengard", "role": "Diver",
 		"hp": 560, "mana": 180, "damage": 30, "interval": 1.2, "range": 7.0, "speed": 4.1,
-		"sight": 12.0, "hp_per_level": 60, "damage_per_level": 5, "mana_regen": 0.8,
+		"sight": 12.0, "hp_per_level": 60, "damage_per_level": 5, "mana_regen": 0.8, "armour": 5, "magic_resist": 22, "ability_power": 0, "hp_regen": 0.5,
 		"ranged": true,
 		"abilities":
 		[
@@ -653,8 +653,8 @@ const ITEMS = {
 		"desc": "+14 attack damage."},
 	"dwarf_mail": {"name": "Dwarven Mail", "cost": 420, "stats": {"hp": 180, "armor": 0.08},
 		"desc": "+180 health, take 8% less damage."},
-	"ring_barahir": {"name": "Ring of Barahir", "cost": 450, "stats": {"mana": 150, "mana_regen": 2.0},
-		"desc": "+150 mana, +2 mana per second."},
+	"ring_barahir": {"name": "Ring of Barahir", "cost": 450, "stats": {"mana": 150, "mana_regen": 2.0, "ap": 20},
+		"desc": "+150 mana, +2 mana per second, +20 ability power."},
 	"horn_mark": {"name": "Horn of the Mark", "cost": 600, "stats": {"hp": 120},
 		"active": {"radius": 14.0, "stat": "speed", "mult": 1.35, "duration": 5.0, "cooldown": 45.0},
 		"desc": "+120 health. Use: allies around you move 35% faster for 5s."},
@@ -663,8 +663,8 @@ const ITEMS = {
 		"desc": "+100 mana. Use: a light in dark places heals allies around you by 180."},
 	"westernesse": {"name": "Blade of Westernesse", "cost": 950, "stats": {"damage": 30, "attack_speed": 0.15},
 		"desc": "+30 attack damage, +15% attack speed."},
-	"mithril": {"name": "Mithril Coat", "cost": 1050, "stats": {"hp": 250, "armor": 0.22},
-		"desc": "+250 health, take 22% less damage."},
+	"mithril": {"name": "Mithril Coat", "cost": 1050, "stats": {"hp": 250, "armor": 0.22, "mr": 20},
+		"desc": "+250 health, take 22% less damage, +20 magic resist."},
 }
 const SHOP_ORDER = [
 	"lembas", "athelas", "horse_rohan", "elven_blade", "dwarf_mail", "ring_barahir", "horn_mark",
@@ -753,6 +753,19 @@ func counter(attacker_class: String, target_kind: String) -> float:
 # level matters more: a level-1 hero can lose to one squadron, a level-10 hero cuts through them
 const LEGEND_BONUS = 1.1
 const ARMY_LOST_HEART = 0.8  # damage multiplier for troops while their hero is dead
+
+# --- combat rules (see source/lotr/combat/) -------------------------------------------------------
+const STATS_TICK = 0.25  # the temp stat layer is rebuilt this often (staggered per unit)
+const MAX_LIFESTEAL = 0.35  # basic attacks only
+const ASSIST_WINDOW = 10.0  # seconds a damaging / CC-ing / healing hero keeps kill credit
+const CC_DR_WINDOW = 6.0  # heroes only: the same CC type inside this window lasts 100%, 50%, 25%...
+const CC_DR_STEPS = [1.0, 0.5, 0.25]
+const CC_DR_IMMUNE = 3.0  # ...then the hero is immune to that type for this long
+const SLOW_FLOOR = 0.3  # a slow never takes move speed below this fraction of base speed
+const SHIELD_STACK_CAP = 2.0  # recasting the same shield from the same source stacks up to 2x
+const TENACITY_CAP = 0.8
+# damage multipliers keyed by tag; 1.0 keeps today's balance (the v4 plan wants 1.5 for hero aoe vs troops)
+const TAG_MULT = {"aoe_vs_troop": 1.0, "siege_vs_building": 1.0}
 
 
 func hero_stats_at_level(hero_key: String, level: int) -> Dictionary:

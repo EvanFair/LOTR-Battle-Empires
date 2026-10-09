@@ -1,9 +1,19 @@
 extends CanvasLayer
-## The whole in-match interface, built in code:
-##  top bar (stockpile, Age, houses, clock), hero panel (HP/mana/XP, QWER), squadron panel,
-##  base panel (Build / Military / Age), villager bubbles, building info, toasts, end screen,
-##  plus 3D effects (arrows, hits, pings, cast rings).
+## The in-match interface. LotrHud lays out the widgets in widgets/ (champion panel, over-head
+## bars, damage numbers, tooltips, cursors) and still builds the older code-made panels:
+##  top bar (stockpile, Age, houses, clock), squadron panel, base panel (Build / Military / Age /
+##  Shop), villager bubbles, building info, toasts, end screen, plus 3D effects (arrows, hits,
+##  pings, cast rings). Everything sits under one scaled root (see _apply_scale) and uses the
+##  Theme from widgets/HudTheme.gd.
 
+const HudTheme = preload("res://source/lotr/hud/widgets/HudTheme.gd")
+const ChampionPanel = preload("res://source/lotr/hud/widgets/ChampionPanel.gd")
+const OverheadBars = preload("res://source/lotr/hud/widgets/OverheadBars.gd")
+const DamageNumbers = preload("res://source/lotr/hud/widgets/DamageNumbers.gd")
+const Tooltips = preload("res://source/lotr/hud/widgets/Tooltips.gd")
+const Cursors = preload("res://source/lotr/hud/widgets/Cursors.gd")
+
+const REFERENCE_SIZE = Vector2(1920, 1080)  # the HUD is laid out for this and scaled to fit
 const PANEL_BG = Color(0.08, 0.07, 0.06, 0.82)
 const ACCENT = Color("e8c24a")
 const RES_ICONS = {"food": "Food", "wood": "Wood", "stone": "Stone", "iron": "Iron", "gold": "Gold"}
@@ -20,14 +30,12 @@ const SQUAD_ORDER_BUTTONS = [
 var _match = null
 var _root = null
 var _top_label = null
-var _hero_name = null
-var _portrait = null
 var _res_labels = {}
-var _hp_bar = null
-var _mana_bar = null
-var _xp_bar = null
-var _ability_buttons = {}
-var _respawn_label = null
+var _champion = null
+var _overhead = null
+var _numbers = null
+var hud_scale = 1.0  # effective factor: window fit * user_scale
+static var user_scale = 1.0  # the 75-125% setting (options menu can write this)
 var _squad_box = null
 var _squad_list = null
 var _squad_detail = null
@@ -38,7 +46,6 @@ var _build_tab = null
 var _military_tab = null
 var _age_tab = null
 var _upgrades_tab = null
-var _learn_buttons = {}
 var _focus_pick = null
 var _steward_button = null
 var _shelter_button = null
@@ -46,7 +53,6 @@ var _feed_label = null
 var _base_tabs = null
 var _squad_lane = null
 var _drag_box = null
-var _item_buttons = []
 var _shop_tab = null
 var _base_hint = null
 var _bubbles = null
@@ -64,13 +70,17 @@ func _ready():
 	layer = 5
 	_start_time = GameData.now()
 	_root = Control.new()
-	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_root.theme = HudTheme.theme()
+	Tooltips.host = _root
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_root)
+	_apply_scale()
+	get_viewport().size_changed.connect(_apply_scale)
+	_numbers = DamageNumbers.new(_match)
 	_build_top_bar()
 	_build_toasts()
 	if _match.local_player != null:
-		_build_hero_panel()
+		_build_champion_panel()
 		_build_squad_panel()
 		_build_base_panel()
 		_build_bubbles()
@@ -81,6 +91,27 @@ func _ready():
 	if _match.hero_controller != null:
 		_match.hero_controller.selected_squad_changed.connect(func(_id): _refresh_squads())
 		_match.hero_controller.mode_changed.connect(_on_mode_changed)
+
+
+func _exit_tree():
+	Cursors.reset()
+
+
+func _apply_scale():
+	"""One scale factor for the whole HUD: window size against the 1920x1080 layout, times the
+	75-125% user setting. The root Control is made bigger by 1/scale so anchors still reach the
+	screen edges."""
+	var vp = get_viewport().get_visible_rect().size
+	hud_scale = clampf(minf(vp.x / REFERENCE_SIZE.x, vp.y / REFERENCE_SIZE.y), 0.6, 2.0) * clampf(user_scale, 0.75, 1.25)
+	_root.scale = Vector2(hud_scale, hud_scale)
+	_root.position = Vector2.ZERO
+	_root.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_root.size = vp / hud_scale
+
+
+func to_hud(screen: Vector2) -> Vector2:
+	"""Screen pixels -> HUD (scaled root) coordinates."""
+	return screen / hud_scale
 
 
 func _process(_delta):
@@ -96,15 +127,10 @@ func _process(_delta):
 
 
 # --- helpers ------------------------------------------------------------------------------------
-func _panel(parent, anchors: int, min_size = Vector2.ZERO) -> PanelContainer:
+func _panel(parent, anchors: int, min_size = Vector2.ZERO, plate = false) -> PanelContainer:
 	var panel = PanelContainer.new()
-	var style = StyleBoxFlat.new()
-	style.bg_color = PANEL_BG
-	style.set_corner_radius_all(6)
-	style.set_content_margin_all(8)
-	style.border_color = Color(ACCENT, 0.35)
-	style.set_border_width_all(1)
-	panel.add_theme_stylebox_override("panel", style)
+	if plate:
+		panel.add_theme_stylebox_override("panel", HudTheme.plate_box())
 	panel.custom_minimum_size = min_size
 	parent.add_child(panel)
 	panel.set_anchors_and_offsets_preset(anchors, Control.PRESET_MODE_MINSIZE, 8)
@@ -120,10 +146,10 @@ func _panel(parent, anchors: int, min_size = Vector2.ZERO) -> PanelContainer:
 	return panel
 
 
-func _label(parent, text = "", size = 14, color = Color.WHITE) -> Label:
+func _label(parent, text = "", size = 14, color = HudTheme.TEXT) -> Label:
 	var label = Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", size)
+	label.add_theme_font_size_override("font_size", size + 1)
 	label.add_theme_color_override("font_color", color)
 	parent.add_child(label)
 	return label
@@ -144,12 +170,8 @@ func _bar(parent, color: Color, height = 12) -> ProgressBar:
 	var bar = ProgressBar.new()
 	bar.custom_minimum_size = Vector2(0, height)
 	bar.show_percentage = false
-	var fill = StyleBoxFlat.new()
-	fill.bg_color = color
-	var bg = StyleBoxFlat.new()
-	bg.bg_color = Color(0, 0, 0, 0.6)
-	bar.add_theme_stylebox_override("fill", fill)
-	bar.add_theme_stylebox_override("background", bg)
+	bar.add_theme_stylebox_override("fill", HudTheme.flat_box(color, Color(0, 0, 0, 0), 0, 2, 0))
+	bar.add_theme_stylebox_override("background", HudTheme.flat_box(Color(0.02, 0.02, 0.03, 0.9), HudTheme.GOLD_DIM, 1, 2, 0))
 	parent.add_child(bar)
 	return bar
 
@@ -171,7 +193,7 @@ func _in_base():
 
 # --- top bar ----------------------------------------------------------------------------------
 func _build_top_bar():
-	var panel = _panel(_root, Control.PRESET_CENTER_TOP)
+	var panel = _panel(_root, Control.PRESET_CENTER_TOP, Vector2.ZERO, true)
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	panel.add_child(row)
@@ -222,136 +244,23 @@ func _refresh_top_bar():
 	_feed_label.text = "\n".join(feed.slice(0, 3))
 
 
-# --- hero panel -------------------------------------------------------------------------------
-func _build_hero_panel():
-	var panel = _panel(_root, Control.PRESET_CENTER_BOTTOM, Vector2(780, 0))
-	var outer = HBoxContainer.new()
-	outer.add_theme_constant_override("separation", 8)
-	panel.add_child(outer)
-	_portrait = TextureRect.new()
-	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_portrait.custom_minimum_size = Vector2(96, 96)
-	_portrait.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	outer.add_child(_portrait)
-	var box = VBoxContainer.new()
-	outer.add_child(box)
-	_hero_name = _label(box, "", 16, ACCENT)
-	_hp_bar = _bar(box, Color("c0392b"), 14)
-	_mana_bar = _bar(box, Color("2e6fd8"), 8)
-	_xp_bar = _bar(box, ACCENT, 4)
-	var row = HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	box.add_child(row)
-	for key in ["Q", "W", "E", "R"]:
-		var col = VBoxContainer.new()
-		col.add_theme_constant_override("separation", 2)
-		row.add_child(col)
-		var learn = _button(col, "+ Learn (Ctrl+%s)" % key, _on_learn_pressed.bind(key), 162)
-		learn.add_theme_font_size_override("font_size", 11)
-		learn.add_theme_color_override("font_color", ACCENT)
-		_learn_buttons[key] = learn
-		var b = _button(col, key, _on_ability_pressed.bind(key), 162)
-		b.custom_minimum_size.y = 46
-		b.add_theme_font_size_override("font_size", 12)
-		b.add_theme_constant_override("icon_max_width", 42)
-		b.clip_text = true
-		_ability_buttons[key] = b
-	var items_row = HBoxContainer.new()
-	items_row.add_theme_constant_override("separation", 6)
-	box.add_child(items_row)
-	for i in range(GameData.ITEM_SLOTS):
-		var b = _button(items_row, "", _on_item_pressed.bind(i), 162)
-		b.add_theme_font_size_override("font_size", 11)
-		b.add_theme_constant_override("icon_max_width", 22)
-		b.clip_text = true
-		_item_buttons.append(b)
-	_respawn_label = _label(box, "", 18, Color("ff8080"))
-	_respawn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-
-func _on_ability_pressed(key):
-	# clicking the button arms the ability; the next left-click on the map casts it
-	_match.hero_controller.arm_ability(key)
-
-
-func _on_item_pressed(slot):
-	_match.hero_controller.use_item(slot)
-
-
-func _on_learn_pressed(key):
-	_match.hero_controller.learn_ability(key)
+# --- champion panel (widgets/ChampionPanel.gd) ----------------------------------------------------
+func _build_champion_panel():
+	_overhead = OverheadBars.new()
+	_overhead.match_node = _match
+	_root.add_child(_overhead)
+	_root.move_child(_overhead, 0)  # under every panel
+	_champion = ChampionPanel.new()
+	_root.add_child(_champion)
+	_champion.build(_match)
+	_champion.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 6)
+	_champion.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_champion.grow_horizontal = Control.GROW_DIRECTION_BOTH
 
 
 func _refresh_hero():
-	var h = _hero()
-	if h == null:
-		_hero_name.text = "Waiting for your hero..."
-		return
-	_hero_name.text = "%s - Level %d %s    HP %d/%d    Mana %d/%d" % [
-		h.display_name, h.level, GameData.HEROES[h.hero_key].role, max(0, h.hp) if not h.dead else 0,
-		h.hp_max, int(h.mana), int(h.mana_max)
-	]
-	if _portrait.texture == null:
-		_portrait.texture = Icons.art("portraits", h.hero_key)
-	_portrait.modulate = Color(0.35, 0.35, 0.35) if h.dead else Color.WHITE
-	_hp_bar.max_value = h.hp_max
-	_hp_bar.value = h.hp if not h.dead else 0
-	_hp_bar.tooltip_text = "%d / %d HP" % [h.hp, h.hp_max]
-	_mana_bar.max_value = max(1.0, h.mana_max)
-	_mana_bar.value = h.mana
-	var lvl_xp = GameData.XP_PER_LEVEL[min(h.level - 1, GameData.XP_PER_LEVEL.size() - 1)]
-	var next_xp = GameData.XP_PER_LEVEL[min(h.level, GameData.XP_PER_LEVEL.size() - 1)]
-	_xp_bar.max_value = max(1, next_xp - lvl_xp)
-	_xp_bar.value = h.xp - lvl_xp
-	var points = h.skill_points()
-	_hero_name.text += ("    +%d skill (Ctrl+key)" % points) if points > 0 else ""
-	for key in _ability_buttons:
-		var b = _ability_buttons[key]
-		var a = h.ability(key)
-		var learn = _learn_buttons[key]
-		learn.visible = a != null and h.can_learn(key) == ""
-		if a == null:
-			b.text = "%s\n-" % key
-			b.disabled = true
-			continue
-		if b.get_meta("icon_for", "") != a.name:
-			b.icon = Icons.ability(a)
-			b.set_meta("icon_for", a.name)
-		var rank = h.ability_rank(key)
-		var pips = "%d/%d" % [rank, GameData.ABILITY_MAX_RANK] if rank > 0 else ""
-		var cd = h.cooldown_left(key)
-		b.disabled = h.dead or rank < 1 or cd > 0.0 or h.mana < a.mana
-		var state = "not learned" if rank < 1 else (("%ds" % ceili(cd)) if cd > 0 else ("%d mana" % a.mana))
-		b.text = "%s %s  %s\n%s" % [key, a.name, pips, state]
-		var live = GameData.ability_at_rank(a, max(1, rank))
-		var detail = []
-		for stat in ["damage", "heal", "stun", "root", "duration", "range", "radius"]:
-			if live.has(stat):
-				detail.append("%s %s" % [stat.capitalize(), str(snappedf(live[stat], 0.1))])
-		b.tooltip_text = "%s (rank %d/%d)\n%s\n%s\nCooldown %ds, %d mana" % [
-			a.name, rank, GameData.ABILITY_MAX_RANK, a.get("desc", ""), ", ".join(detail),
-			int(live.cooldown), a.mana]
-	for i in range(_item_buttons.size()):
-		var b = _item_buttons[i]
-		if i >= h.items.size():
-			b.icon = null
-			b.text = "%d: (empty)" % (i + 5)
-			b.disabled = true
-			b.tooltip_text = "Buy items at the Shop tab of the base panel (B in base)"
-			continue
-		var it = h.items[i]
-		var data = GameData.ITEMS[it.key]
-		var wait = max(0.0, it.ready_at - GameData.now())
-		var usable = data.get("consumable", false) or data.has("active")
-		b.icon = Icons.item(it.key)
-		b.text = "%d: %s%s" % [i + 5, data.name, (" %ds" % ceili(wait)) if wait > 0 else ""]
-		b.disabled = h.dead or not usable or wait > 0
-		b.tooltip_text = "%s\n%s" % [data.name, data.desc]
-	if h.dead:
-		_respawn_label.text = "Respawning in %ds" % ceili(max(0.0, h.respawn_at - GameData.now()))
-	else:
-		_respawn_label.text = ""
+	if _champion != null:
+		_champion.refresh()
 
 
 # --- squadrons --------------------------------------------------------------------------------
@@ -406,7 +315,7 @@ func draw_drag_box(start, end):
 	if start == null or end == null or start.distance_to(end) < 8.0:
 		_drag_box.visible = false
 		return
-	var r = Rect2(start, Vector2.ZERO).expand(end)
+	var r = Rect2(to_hud(start), Vector2.ZERO).expand(to_hud(end))
 	_drag_box.position = r.position
 	_drag_box.size = r.size
 	_drag_box.visible = true
@@ -872,7 +781,7 @@ func _refresh_bubbles():
 	if _bubble_house == null or not is_instance_valid(_bubble_house) or not _bubble_house.is_alive():
 		_bubbles.visible = false
 		return
-	var screen = get_viewport().get_camera_3d().unproject_position(_bubble_house.global_position)
+	var screen = to_hud(get_viewport().get_camera_3d().unproject_position(_bubble_house.global_position))
 	_bubbles.position = screen + Vector2(-_bubbles.size.x / 2.0, 30)
 	var alive = _bubble_house.alive_villagers().size() if _match.is_host() else _bubble_house.get_meta("villagers_alive", 0)
 	var title = "Villagers in this house %d/%d" % [alive, GameData.VILLAGERS_PER_HOUSE]
@@ -916,7 +825,7 @@ func _refresh_info():
 	if b == null or not is_instance_valid(b) or not b.is_alive():
 		_info_panel.visible = false
 		return
-	var screen = get_viewport().get_camera_3d().unproject_position(b.global_position)
+	var screen = to_hud(get_viewport().get_camera_3d().unproject_position(b.global_position))
 	_info_panel.position = screen + Vector2(-_info_panel.size.x / 2.0, 30)
 	var text = "%s   %d/%d HP" % [b.display_name, b.hp, b.hp_max]
 	if not b.is_constructed():
@@ -934,21 +843,42 @@ func _build_toasts():
 	_toasts = VBoxContainer.new()
 	_toasts.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	_toasts.offset_top = 60
+	_toasts.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_toasts)
 
 
 func show_toast(text: String):
-	var label = _label(_toasts, text, 16, Color("ffe9a8"))
+	var plate = PanelContainer.new()
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.add_theme_stylebox_override("panel", _toast_box())
+	var label = HudTheme.label(plate, text, 18, Color("ffe9a8"), "head_reg")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_color_override("font_outline_color", Color.BLACK)
-	label.add_theme_constant_override("outline_size", 4)
+	plate.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_toasts.add_child(plate)
 	while _toasts.get_child_count() > 5:
 		_toasts.get_child(0).free()
-	var tween = label.create_tween()
+	var tween = plate.create_tween()
 	tween.tween_interval(TOAST_TIME)
-	tween.tween_property(label, "modulate:a", 0.0, 0.6)
-	tween.tween_callback(label.queue_free)
+	tween.tween_property(plate, "modulate:a", 0.0, 0.6)
+	tween.tween_callback(plate.queue_free)
+
+
+func _toast_box() -> StyleBox:
+	var tex = HudTheme.scaled_tex("toast", 0.42)
+	if tex == null:
+		return HudTheme.flat_box(Color(0.03, 0.035, 0.05, 0.85), HudTheme.GOLD_DIM, 1, 4, 6)
+	var sb = StyleBoxTexture.new()
+	sb.texture = tex
+	sb.texture_margin_left = 34
+	sb.texture_margin_right = 34
+	sb.texture_margin_top = 16
+	sb.texture_margin_bottom = 16
+	sb.content_margin_left = 38
+	sb.content_margin_right = 38
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 8
+	return sb
 
 
 func show_end_screen(text: String, won: bool):
@@ -966,7 +896,7 @@ func show_end_screen(text: String, won: bool):
 	var box = VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_end_screen.add_child(box)
-	var title = _label(box, text, 42, ACCENT if won else Color("ff6b6b"))
+	var title = HudTheme.label(box, text, 46, ACCENT if won else Color("ff6b6b"), "head")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_button(box, "Back to main menu", _back_to_menu)
 	Sfx.stop_music()
@@ -1021,7 +951,7 @@ func play_fx(kind: String, from: Vector3, to: Vector3):
 		"loot":
 			var me = _match.local_player
 			if me != null and _match.player_for_slot(int(to.y)) != null and Teams.is_ally(_match.player_for_slot(int(to.y)), me):
-				_float_text(from, "+%d" % int(to.x), Color(1.0, 0.84, 0.25), 40 if int(to.y) == me.slot_index else 30)
+				_numbers.text(from, "+%d" % int(to.x), DamageNumbers.COLORS.gold, 54 if int(to.y) == me.slot_index else 38)
 				if int(to.y) == me.slot_index:
 					Sfx.play("coin", from)
 		# sound-only events
@@ -1065,47 +995,17 @@ func _arrow(from: Vector3, to: Vector3):
 	tween.tween_callback(mesh.queue_free)
 
 
-func _float_text(at: Vector3, text: String, color: Color, size: int):
-	var label = Label3D.new()
-	label.text = text
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.font_size = size
-	label.outline_size = 8
-	label.pixel_size = 0.01
-	label.modulate = color
-	_match.add_child(label)
-	label.global_position = at + Vector3(0, 2.8, 0)
-	var tween = label.create_tween().set_parallel(true)
-	tween.tween_property(label, "global_position:y", label.global_position.y + 1.6, 1.2)
-	tween.tween_property(label, "modulate:a", 0.0, 1.0).set_delay(0.4)
-	tween.chain().tween_callback(label.queue_free)
-
-
 func _damage_number(at: Vector3, amount: int, from_slot: int, to_slot: int):
 	var me = _match.local_player
-	var color = Color(1, 1, 1, 0.85)
-	var size = 34
+	var kind = "other"
+	var mine = false
 	if me != null and to_slot == me.slot_index:
-		color = Color(1.0, 0.35, 0.3)  # damage you take
-		size = 46
+		kind = "taken"  # damage you take
+		mine = true
 	elif me != null and from_slot == me.slot_index:
-		color = Color(1.0, 0.82, 0.3)  # damage you deal
-		size = 46
-	var label = Label3D.new()
-	label.text = str(amount)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.font_size = size
-	label.outline_size = 8
-	label.pixel_size = 0.01
-	label.modulate = color
-	_match.add_child(label)
-	label.global_position = at + Vector3(randf_range(-0.4, 0.4), 2.2, randf_range(-0.4, 0.4))
-	var tween = label.create_tween().set_parallel(true)
-	tween.tween_property(label, "global_position:y", label.global_position.y + 1.2, 0.9)
-	tween.tween_property(label, "modulate:a", 0.0, 0.9).set_delay(0.3)
-	tween.chain().tween_callback(label.queue_free)
+		kind = "physical"  # damage you deal (magic arrives as its own kind once abilities carry a damage type)
+		mine = true
+	_numbers.damage(at, amount, kind, mine)
 
 
 func _bolt(from: Vector3, to: Vector3):

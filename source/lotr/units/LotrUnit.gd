@@ -14,7 +14,10 @@ var unit_kind = "troop"  # troop | villager | hero | building
 var unit_class = "infantry"  # counter class: infantry/archer/rider/heavy/special/hero/villager
 var target_kind = "infantry"  # how counters see this unit as a target
 var display_name = ""
-var stats = {}
+var base_stats = {}  # factory data (hp, damage, interval, range, speed, armor...) used to seed Stats
+var stats = null  # Stats: every number that can change in a fight; read stats.armour, stats.move_speed...
+var status = null  # Status: can_move / can_attack / can_cast / stunned ... (only buffs write it)
+var bm = null  # BuffManager: bm.add(StunBuff.new(1.0), source), bm.cleanse(Buff.ROOT) ...
 var spawn_params = {}  # everything the factory needs to rebuild this unit on a client
 var net_id = 0
 var puppet = false
@@ -22,19 +25,28 @@ var squad = null
 var auto_acquire = true
 var aggro_range = 0.0  # 0 means use sight range
 var ranged = false
-var armor = 0.0  # flat damage reduction fraction (0..0.9)
-var damage_mult = 1.0
-var attack_speed_mult = 1.0
-var attack_speed_bonus = 0.0  # from items (+0.15 = 15% faster)
-var speed_bonus = 0.0  # from items
-var speed_mult = 1.0:
-	set(value):
-		speed_mult = value
-		_apply_speed()
+# --- legacy shims: read-only mirrors of Stats / Status for older code and the HUD -----------------------
+# (written by _sync_from_stats; change a stat through a Buff or the Stats layers, not these)
+var armor = 0.0  # damage reduction fraction 0..0.9 (stats.armour is the real number, in points)
+var damage_mult = 1.0  # buff multiplier on attack_damage
+var attack_speed_mult = 1.0  # buff multiplier on attack speed
+var attack_speed_bonus = 0.0  # percent layers (items, haste) on attack speed
+var speed_bonus = 0.0  # percent layers on move speed
+var speed_mult = 1.0  # final move speed / (base * (1 + speed_bonus))
 var rooted_until = 0.0
 var stunned_until = 0.0
-var buffs = []  # {stat, mult, until}; mult > 1 is a buff, < 1 a debuff (slow, weaken)
-var _base_armor = -1.0
+var _base_armor = 0.0  # armour fraction before buffs
+var buffs:  # old {stat, mult, until} list, built from the BuffManager (HUD compatibility)
+	get:
+		return _legacy_buffs()
+var credit = {}  # hero instance id -> [hero, time]: who damaged / CC'd this unit (assist window)
+var support = {}  # hero instance id -> [hero, time]: allied heroes who healed / shielded this unit
+var last_credit = {}  # set when this unit is killed: {killer, assists}
+var _death_ctx = null
+var _stats_timer = 0.0
+var _stats_dirty = false
+var _rebuilding = false
+var _synced = {}  # last stat-derived values written into the legacy fields (delta sync)
 var last_attacker = null
 var anim_driver = null
 var last_attack_at = -10.0  # game time of the latest swing (replicated so puppets animate too)
@@ -51,6 +63,13 @@ var _repath_timer = 0.0
 var _next_hit_at = 0.0
 var _base_speed = 0.0
 var _movement = null
+
+
+func _init():
+	stats = Stats.new()
+	status = Status.new()
+	bm = BuffManager.new(self)
+	_stats_timer = randf() * GameData.STATS_TICK  # staggered so 200 units don't rebuild together
 
 
 func _ready():
@@ -79,6 +98,8 @@ func is_revealing():
 
 # --- orders (host only) ---------------------------------------------------------------------
 func order_move(position: Vector3):
+	if _forced():
+		return
 	order = Order.MOVE
 	order_position = position
 	order_target = null
@@ -96,13 +117,25 @@ func order_attack_move(position: Vector3):
 
 
 func order_attack(target, keep_attack_move = false):
-	if target == null or not is_instance_valid(target):
+	if target == null or not is_instance_valid(target) or _forced():
 		return
 	var resume = attack_move_target if keep_attack_move else null
 	order = Order.ATTACK
 	order_target = target
 	attack_move_target = resume
 	_repath_timer = 0.0
+
+
+func force_attack(target):
+	"""A taunt: attack `target` no matter what the player ordered."""
+	order = Order.ATTACK
+	order_target = target
+	attack_move_target = null
+
+
+func _forced() -> bool:
+	"""Feared, charmed or taunted units ignore orders (the buff steers them)."""
+	return status.feared or status.charmed or status.taunted
 
 
 func order_stop():
@@ -122,75 +155,175 @@ func order_hold():
 func _physics_process(delta):
 	if puppet or not is_alive():
 		return
-	_expire_buffs()
+	bm.process(delta)
+	_stats_timer -= delta
+	if _stats_timer <= 0.0:
+		_stats_timer += GameData.STATS_TICK
+		if _stats_dirty or not bm.is_empty() or unit_kind == "hero":
+			rebuild_stats()
 	_land_pending_hit()
 	_brain(delta)
 
 
-# --- buffs --------------------------------------------------------------------------------------
-func apply_buff(stat: String, mult: float, duration: float):
-	"""stat: damage | attack_speed | speed (multipliers) or armor (added, e.g. 0.3).
-	The strongest buff and the strongest debuff of a stat apply; same-sign ones don't stack."""
-	var until = GameData.now() + duration
-	var debuff = mult < 1.0 and stat != "armor"
-	buffs = buffs.filter(func(b):
-		if b.stat != stat or (b.mult < 1.0 and stat != "armor") != debuff:
-			return true
-		return (b.mult < mult) if debuff else (b.mult > mult))
-	buffs.append({"stat": stat, "mult": mult, "until": until})
-	_recompute_buffs()
+# --- buffs, status and stats (see source/lotr/combat/) ------------------------------------------------------
+func apply_buff(stat: String, mult: float, duration: float, source = null):
+	"""Old-style timed multiplier, now a real Buff. stat: damage | attack_speed | speed (multipliers)
+	or armor (a fraction added, e.g. 0.3). The strongest buff and the strongest debuff of a stat
+	apply; a speed < 1 is a slow (one per source, floor 30% of base speed)."""
+	var buff = null
+	match stat:
+		"damage":
+			buff = StatModBuff.new("mod_damage_up" if mult >= 1.0 else "mod_damage_down", duration).best_mult("attack_damage", mult)
+		"attack_speed":
+			buff = StatModBuff.new("mod_attack_speed_up" if mult >= 1.0 else "mod_attack_speed_down", duration).best_mult("attack_speed", mult)
+		"speed":
+			if mult >= 1.0:
+				buff = HasteBuff.new(mult - 1.0, duration)
+			else:
+				buff = SlowBuff.new(1.0 - mult, duration)
+		"armor":
+			buff = StatModBuff.new("armor_up", duration).best_flat("armour", Stats.points_from_fraction(mult))
+	if buff != null:
+		bm.add(buff, source)
 
 
-func stun(duration: float):
-	stunned_until = max(stunned_until, GameData.now() + duration)
-	_pending_hit = null
-	if _movement != null:
-		_movement.stop()
+func stun(duration: float, source = null):
+	bm.add(StunBuff.new(duration), source)
 
 
 func is_stunned() -> bool:
-	return GameData.now() < stunned_until
+	if puppet:
+		return GameData.now() < stunned_until
+	return status.stunned or status.airborne
 
 
 func is_rooted() -> bool:
-	return GameData.now() < rooted_until or is_stunned()
+	if puppet:
+		return GameData.now() < rooted_until or is_stunned()
+	return status.rooted or is_stunned()
 
 
-func _expire_buffs():
-	if buffs.is_empty():
+func mark_stats_dirty():
+	_stats_dirty = true
+
+
+func rebuild_stats(first = false):
+	"""Rebuild the temp stat layer from items, research, level, buffs and auras, then write the
+	result into the legacy fields. Runs every 0.25 s (staggered), and at once when a buff comes or goes."""
+	if _rebuilding:
 		return
+	_rebuilding = true
+	stats.level = _stat_level()
+	stats.begin()
+	_contribute_stats(stats)
+	stats.mark_gear()
+	bm.apply_stats(stats)
+	stats.finish()
+	_rebuilding = false
+	_stats_dirty = false
+	_sync_from_stats(first)
+
+
+func _stat_level() -> int:
+	return 1
+
+
+func _contribute_stats(_s):
+	"""Subclasses add their own temp-layer sources here (a hero's items, research...)."""
+	pass
+
+
+func _status_changed():
 	var now = GameData.now()
-	var before = buffs.size()
-	buffs = buffs.filter(func(b): return b.until > now)
-	if buffs.size() != before:
-		_recompute_buffs()
+	stunned_until = now + bm.longest_remaining(Buff.STUN | Buff.KNOCKUP) if (status.stunned or status.airborne) else 0.0
+	rooted_until = now + bm.longest_remaining(Buff.ROOT) if status.rooted else 0.0
+	if (status.stunned or status.airborne or status.rooted) and _movement != null and not puppet:
+		_movement.stop()
+	if not status.can_attack:
+		_pending_hit = null
 
 
-func _recompute_buffs():
-	var up = {"damage": 1.0, "attack_speed": 1.0, "speed": 1.0}
-	var down = {"damage": 1.0, "attack_speed": 1.0, "speed": 1.0}
-	var armor_bonus = 0.0
-	for b in buffs:
-		if b.stat == "armor":
-			armor_bonus = max(armor_bonus, b.mult)
-		elif b.mult >= 1.0:
-			up[b.stat] = max(up[b.stat], b.mult)
+func _sync_from_stats(first = false):
+	"""Push Stats into the fields older code reads. Values are applied as deltas so a direct write
+	(a test setting hp_max) survives until the stat itself changes."""
+	var s = stats
+	var new_hp_max = int(s.max_hp)
+	if first or not _synced.has("hp"):
+		hp_max = new_hp_max
+		hp = hp_max
+	elif new_hp_max != _synced.hp:
+		var diff = new_hp_max - _synced.hp
+		hp_max += diff
+		if diff > 0:
+			hp = hp + diff
+		if hp > hp_max:
+			hp = hp_max
+	_synced.hp = new_hp_max
+	if attack_damage != null:
+		var m = s.mult_part[Stats.S.ATTACK_DAMAGE]
+		var pre = s.attack_damage / m
+		if first or not _synced.has("ad"):
+			attack_damage = pre
 		else:
-			down[b.stat] = min(down[b.stat], b.mult)
-	damage_mult = up.damage * down.damage
-	attack_speed_mult = up.attack_speed * down.attack_speed
-	speed_mult = up.speed * down.speed
-	if _base_armor < 0.0:
-		_base_armor = armor
-	armor = min(0.9, _base_armor + armor_bonus)
+			attack_damage += pre - _synced.ad
+		_synced.ad = pre
+		damage_mult = m
+		var r = s.attack_range
+		if first or not _synced.has("range"):
+			attack_range = r
+		else:
+			attack_range += r - _synced.range
+		_synced.range = r
+	attack_speed_mult = s.mult_part[Stats.S.ATTACK_SPEED]
+	attack_speed_bonus = s.pct_part[Stats.S.ATTACK_SPEED]
+	speed_bonus = s.pct_part[Stats.S.MOVE_SPEED]
+	var nominal = maxf(0.01, s.base_move_speed * (1.0 + speed_bonus))
+	speed_mult = s.move_speed / nominal if s.base_move_speed > 0.0 else 1.0
+	armor = s.armour_fraction()
+	_base_armor = Stats.fraction_from_points(s.armour_before_buffs)
+	_apply_speed()
+	_sync_extra(first)
+
+
+func _sync_extra(_first):
+	pass
+
+
+func _legacy_buffs() -> Array:
+	var out = []
+	var now = GameData.now()
+	for b in bm.active:
+		if not b.active or b.remaining == INF:
+			continue
+		var until = now + b.remaining
+		if b is HasteBuff:
+			out.append({"stat": "speed", "mult": 1.0 + b.value, "until": until})
+		elif b is SlowBuff:
+			out.append({"stat": "speed", "mult": 1.0 - b.value, "until": until})
+		elif b is StatModBuff:
+			for m in b.mods:
+				var name = Stats.NAMES[m[0]]
+				if m[1] == "best_mult" and name in ["attack_damage", "attack_speed", "move_speed"]:
+					out.append({"stat": {"attack_damage": "damage", "attack_speed": "attack_speed", "move_speed": "speed"}[name], "mult": m[2], "until": until})
+				elif m[1] == "best_flat" and name == "armour":
+					out.append({"stat": "armor", "mult": Stats.fraction_from_points(m[2]), "until": until})
+	return out
+
+
+func buff_list() -> Array:
+	"""For the HUD: [{key, icon, title, tooltip, stacks, remaining, duration, negative}] (one per
+	buff key, host and clients alike), plus recall for heroes is shown by the HUD itself."""
+	return bm.list()
 
 
 func _brain(delta):
-	if is_stunned():
+	if status.stunned or status.airborne:
 		if _movement != null:
 			_movement.stop()
 		return
-	if GameData.now() < rooted_until and _movement != null:
+	if status.feared or status.charmed:
+		return  # the buff steers them
+	if status.rooted and _movement != null:
 		_movement.stop()
 	match order:
 		Order.MOVE:
@@ -280,12 +413,12 @@ func _target_radius(target):
 
 func _try_hit(target):
 	var now = GameData.now()
-	if now < _next_hit_at:
+	if now < _next_hit_at or not status.can_attack:
 		return
 	var distance = global_position_yless.distance_to(target.global_position_yless)
 	if distance > attack_range + _target_radius(target) + 0.2:
 		return
-	_next_hit_at = now + attack_interval / (attack_speed_mult * (1.0 + attack_speed_bonus))
+	_next_hit_at = now + 1.0 / maxf(0.05, stats.attack_speed)
 	last_hit_target = target
 	_face(target.global_position)
 	notify_attack()
@@ -299,6 +432,9 @@ func _try_hit(target):
 
 func _land_pending_hit():
 	if _pending_hit == null or GameData.now() < _pending_hit.at:
+		return
+	if not status.can_attack:
+		_pending_hit = null
 		return
 	var target = _pending_hit.target
 	_pending_hit = null
@@ -322,21 +458,37 @@ func _face(point: Vector3):
 
 
 func _apply_speed():
-	if _movement != null and _base_speed > 0.0:
-		_movement.speed = _base_speed * speed_mult * (1.0 + speed_bonus)
+	if _movement != null and _base_speed > 0.0 and not puppet:
+		_movement.speed = stats.move_speed if stats.move_speed > 0.0 else _base_speed * speed_mult * (1.0 + speed_bonus)
 
 
 # --- stats ------------------------------------------------------------------------------------
 func _setup_default_properties_from_constants():
-	hp_max = int(stats.get("hp", 100))
+	hp_max = int(base_stats.get("hp", 100))
 	hp = hp_max
-	if stats.has("damage"):
-		attack_damage = stats.damage
-		attack_interval = stats.get("interval", 1.0)
-		attack_range = stats.get("range", 1.5)
+	if base_stats.has("damage"):
+		attack_damage = base_stats.damage
+		attack_interval = base_stats.get("interval", 1.0)
+		attack_range = base_stats.get("range", 1.5)
 		attack_domains = [Constants.Match.Navigation.Domain.TERRAIN]
-	sight_range = stats.get("sight", 8.0)
-	ranged = stats.get("ranged", false)
+	sight_range = base_stats.get("sight", 8.0)
+	ranged = base_stats.get("ranged", false)
+	_seed_stats()
+	rebuild_stats(true)
+
+
+func _seed_stats():
+	"""Permanent layer of Stats from the factory data. Subclasses (Hero) override for level growth."""
+	var d = base_stats
+	stats.set_base("max_hp", float(d.get("hp", 100)))
+	if d.has("damage"):
+		stats.set_base("attack_damage", float(d.damage))
+		stats.set_base("attack_speed", 1.0 / maxf(0.05, float(d.get("interval", 1.0))))
+		stats.set_base("attack_range", float(d.get("range", 1.5)))
+	stats.set_base("move_speed", float(d.get("speed", 0.0)) if unit_kind != "building" else 0.0)
+	stats.set_base("armour", Stats.points_from_fraction(d.get("armor", 0.0)))
+	stats.set_base("magic_resist", float(d.get("magic_resist", 0.0)))
+	stats.set_base("hp_regen", float(d.get("hp_regen", 0.0)))
 
 
 func _setup_color():
@@ -356,7 +508,17 @@ func _set_action(action_node):
 		action_node.queue_free()
 
 
+func _on_death_common():
+	"""on_death hooks, then every buff goes (the unit is done or, for heroes, respawns clean)."""
+	if not puppet:
+		if not bm.is_empty():
+			bm.fire_death(_death_ctx)
+			bm.clear_all(true)
+	_death_ctx = null
+
+
 func _handle_unit_death():
+	_on_death_common()
 	died_on_host.emit()
 	var match_node = get_tree().get_first_node_in_group("lotr_match") if is_inside_tree() else null
 	if match_node != null and not puppet:
