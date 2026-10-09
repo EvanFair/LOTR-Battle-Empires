@@ -1,0 +1,366 @@
+BATTLE EMPIRES - PLAN v4 (9 Oct 2026)
+=======================================
+Focus of this version: a League-of-Legends-quality HUD, and deep hero gameplay (how
+abilities work with and against each other). Character art waits for your Battle for
+Middle-earth mod assets.
+
+
+0. THINGS TO KNOW FIRST
+-----------------------
+a) Characters
+   - The file that arrived is "Auto-Rigger-main.zip". It is a rigging script for
+     Autodesk Maya (MIT licence), not character models. The six characters did not
+     come through. Please upload them again (as a release, the same way as before).
+   - We can't use the Maya script here: it needs Maya, which is paid desktop software.
+   - Rigging plan for later (no Maya needed):
+     * Blender runs headless in this container (the "bpy" Python package).
+     * A script fits our existing Quaternius mannequin skeleton to each character and
+       binds it with automatic weights.
+     * Every character then gets all 86 animations we already have (walk, run, sword
+       combos, spells, death...) with no hand animation.
+     * Fallback: Mixamo (free, web, manual upload per character) if a mesh is too
+       messy for automatic weights.
+
+b) BFME mod assets: a licence warning
+   - Battle for Middle-earth models, textures and sounds belong to EA (and the
+     film/Tolkien licence holders), even inside free mods. Mod authors can share them
+     with game owners, but we cannot put them in a public GitHub repo or a public
+     download.
+   - Options when you have it:
+     (1) Use it only as reference (layouts, unit lists, ability ideas, map shapes) and
+         keep our own CC0 art. Safe.
+     (2) Keep the repo and releases private, for personal play only.
+     (3) Only use parts the mod authors made themselves AND that they released under
+         an open licence (rare; it has to be checked file by file).
+   - Recommended: (1). Map ideas, unit rosters and ability designs are free to use;
+     the files are not.
+
+c) The "Tests failed" email
+   - The bot-match tests pass. The failing one is the old rules test, which was
+     written for the 4-base game and checks things v3 changed.
+   - Fix: rewrite it for 3v3 (Section 5). The LAN test was skipped because of it.
+
+
+1. THE HUD: MAKE IT LOOK LIKE LEAGUE
+------------------------------------
+What is wrong now:
+- Big rectangular text boxes.
+- Stats written as sentences.
+- Text buttons for abilities.
+- No cooldown sweeps.
+- No team frames and no scoreboard.
+- The minimap sits on the wrong side.
+- No hero bars over heads.
+- The build menu takes over the screen.
+
+Target layout (1920x1080, scales with the window):
+
+  +------------------------------------------------------------------------------+
+  | [kill feed / announcements]        [12 Supplies +410]   K 4 / D 2 / A 7  14:22 |
+  |                                                          [team frames, right]  |
+  |                                                          [ally 1 portrait+HP]  |
+  |                                                          [ally 2 portrait+HP]  |
+  | [army cards, left]                                                            |
+  |  Gondor Soldiers  ||||| follow                                                |
+  |  Archers          |||   hold                                                  |
+  |                                                                               |
+  |          [buffs/debuffs row]                                    +----------+  |
+  |  +-----+ +------+ [Q][W][E][R]  [D][F]  [5][6][7][8] [B]        | minimap  |  |
+  |  |stats| |PORTR.| [=========== HP 991/1483 ===========] +2.7    |  frame   |  |
+  |  |     | | lvl 9| [=========== MP 165/460 ============] +6.3    +----------+  |
+  |  +-----+ +------+                         1176 Supplies [shop]  [Kingdom]     |
+  +------------------------------------------------------------------------------+
+
+Components (each its own script in source/lotr/hud/):
+
+- HeroBar (bottom centre), like LoL's champion panel:
+  * Round portrait (our HP art) in the round frame UI16, with an XP ring around it,
+    a level badge, and a respawn countdown over a greyed portrait while dead.
+  * Stats block to its left, icon + number, no words:
+    damage, armour, magic resist, attack speed, move speed, ability power.
+  * Q W E R slots:
+    - 64 px icon in frame UI03; R uses the gold ult frame UI04.
+    - Radial cooldown sweep with the seconds counting down.
+    - Mana cost under each slot. Rank pips (1-3).
+    - A yellow "+" level-up arrow when a skill point is free (click or Ctrl+key).
+    - Greyed and blue-tinted when there isn't enough mana.
+    - A key label in the corner.
+  * D / F hero utilities, then 5-8 item slots (UI05), then the B recall slot.
+  * HP bar (green) and mana bar (blue) under the abilities: "991 / 1483" with regen
+    per second at the right end, plus a shield overlay (white) and damage taken
+    flashing.
+  * Buff/debuff row above the abilities: status icons (EM06-EM14) with timer sweeps.
+
+- Supplies and shop (under the items):
+  * Team Supplies with the coin icon and income per minute.
+  * A Shop button (P): a LoL-style shop window with an item grid on the left and
+    details on the right ("Recommended for your hero" first).
+
+- Minimap (bottom right):
+  * Our minimap art frame (UI10).
+  * Coloured icons: allied heroes as small portraits, enemy heroes red-ringed,
+    towers, lairs with respawn timers, troll pits.
+  * Ping wheel on Alt-click.
+
+- Scoreboard strip (top right):
+  * Team kills, your K/D/A, your last hits ("CS"), the game clock.
+  * Tab held: full scoreboard of all 6 heroes (items, level, KDA, last hits).
+
+- Team frames (right edge):
+  * The two allies: portrait, HP/mana sliver, level, ult-ready dot, respawn timer.
+  * Click one to centre the camera on them.
+
+- Announcements and kill feed (top centre):
+  * "Enemy slain", "First Blood", "Tower claimed", "Lair cleared", "Your city is
+    under attack".
+  * Portraits of killer and victim, with voice-style sound stings.
+
+- Army panel (left, collapsible): your squads as cards.
+  * Unit icon (IC23-27), soldier pips, HP bar, order state (Follow / Hold / March).
+  * Click a card to select; G = follow me.
+
+- Kingdom panel (opened with B or the button, not always on screen):
+  * Tabs: Build / Army / Age / Smithy, styled with our panel art.
+  * Build tab: a grid of the building pictures (IC30-39) with Supplies cost and
+    hover tooltips, plus Steward and Shelter toggles.
+  * The Age tab shows feats progress.
+
+- In the world:
+  * LoL-style bars over heads:
+    - Heroes: a big bar with a level box, segmented every 100 HP, the name above.
+    - Squads: thin bars.
+    - Colours: ally blue, you green, enemy red.
+  * Our gold "+N" for last hits and damage numbers stay.
+  * Move/attack markers stay.
+  * Cursors from UI15: sword over enemies, hand over allies.
+
+- Tooltips, LoL style:
+  * Name, cost and cooldown on the top line.
+  * Description with coloured keywords: physical orange, magic blue, heal green,
+    crowd control purple.
+  * Scaling text, e.g. "(+60% bonus damage)".
+
+- Look:
+  * Our UI art kit (UI01-16) as 9-slice frames, on dark slate glass with bronze
+    trim.
+  * Fonts (OFL, free): Cinzel for headers and numbers that matter, Alegreya Sans for
+    body text.
+  * All text gets outlines.
+
+- Settings:
+  * HUD scale (75-125%).
+  * Show/hide damage numbers.
+  * Quick-cast vs hold-to-aim.
+  * Mouse edge-pan on/off.
+
+
+2. HERO GAMEPLAY: HOW ABILITIES WORK WITH AND AGAINST EACH OTHER
+----------------------------------------------------------------
+2.1 Core combat rules (new or reworked)
+- Damage types:
+  * PHYSICAL (swords, arrows), reduced by Armour.
+  * MAGIC (Saruman, the Witch-king, Théoden's holy light, Morgul), reduced by Magic
+    Resist.
+  * TRUE (executes, Éowyn's R against the Witch-king), not reduced.
+  * Items and Blacksmith research give Armour and Magic Resist, so building against
+    the enemy matters.
+- Crowd control (CC) taxonomy, shared by heroes, troops and creatures:
+  * Hard CC: stun, knock-back/knock-up, fear (runs away), taunt, silence (no
+    abilities).
+  * Soft CC: slow, root (can walk no further, but can still attack and cast), weaken
+    (deals less damage), blind (basic attacks miss), Morgul wound (healing -50%).
+  * Tenacity (from items and Boromir's Last Stand) shortens CC.
+  * Diminishing returns: a second stun within 4 seconds lasts half as long, a third
+    a quarter. No chain-stun-locks.
+  * Unstoppable windows (Last Stand, Bloodlust, charges): immune to CC while they
+    last.
+- Abilities become real projectiles:
+  * Skillshots travel at a speed and can be dodged.
+  * Ground AoEs show a telegraph circle before they land (about 0.4 s).
+  * Enemies see the warning too, so dodging becomes a skill.
+- Channels (recall, Saruman's Fire of Orthanc, Dread Shriek charge) are interrupted
+  by hard CC.
+- Stealth (Faramir W, Shelob E):
+  * Invisible to enemies unless within 3 m of an enemy watchtower or claimed tower.
+  * Revealed for 2 s when damaged.
+  * The first attack out of stealth is empowered.
+- Shields (Boromir's horn, Théoden's Arise Riders): absorb damage first, shown white
+  on the HP bar.
+- Passives (new, one per hero): a defining trait that rewards the hero's playstyle
+  (see 2.3).
+
+2.2 Heroes vs armies (so neither replaces the other)
+- Hero AoE deals +50% to troops (heroes cleave squads). Single-target abilities do
+  normal damage to troops.
+- Squads deal +25% to heroes below level 6 and normal damage after that. "Army loses
+  heart" stays.
+- Squads within 8 m of their own living hero get +10% damage (the hero's presence).
+  Your squads already follow you.
+- Charges:
+  * A mounted charge or leap knocks infantry back.
+  * SPEARS stop it: a charge that hits a spear squad stuns the charger for 1 s.
+  * Cavalry beats archers, spears beat cavalry, swords beat spears.
+- Fear (the Witch-king's Dread Shriek, Gothmog's war cry) makes troops flee for a few
+  seconds. Heroes are only slowed by it.
+- Healing reduced by Morgul wounds, so Mordor counters Rohan's sustain.
+- Buildings: only siege troops and abilities tagged "siege" do full damage. Heroes
+  do 50%. The Town Center hits heroes harder than troops (Nexus-style turret rules),
+  so you need an army to take a city.
+
+2.3 The 12 heroes in 3v3 (each faction is one team of 3)
+GONDOR (fighter / tank / marksman)
+- Aragorn
+  * Passive "Heir of Isildur": +5% damage per nearby allied hero or squad (max 3).
+  * Q Andúril Strike: execute.
+  * W For Frodo!: rally.
+  * E Ranger's Dash.
+  * R Army of the Dead: the summons FEAR troops they hit.
+- Boromir
+  * Passive "Shield of Gondor": blocks the first hit every 8 s.
+  * Q Shield Bash: stun.
+  * W Horn of Gondor: SHIELD for allies plus taunts nearby enemy troops.
+  * E Charge: knock-back.
+  * R Last Stand: unstoppable, and cannot die for 3 s.
+- Faramir
+  * Passive "Ranger's Eye": sees stealthed enemies within 6 m.
+  * Q Volley: telegraphed.
+  * W Ithilien Stealth.
+  * E Precise Shot: root.
+  * R Rangers: summon.
+  * Combo: Boromir stuns, Faramir roots, Aragorn executes.
+
+ROHAN (support / fighter / assassin)
+- Théoden
+  * Passive "Lord of the Mark": allied cavalry +10% speed.
+  * Q Herugrim: MAGIC damage.
+  * W Arise, Riders: shield + heal.
+  * E Snowmane.
+  * R Ride of the Rohirrim: team haste and CC cleanse.
+- Éomer
+  * Passive "Marshal": his charges pull his squads along.
+  * Q Spear Throw: slow.
+  * W Riders of the Mark.
+  * E Charge: knock-back.
+  * R Death!: rally.
+- Éowyn
+  * Passive "Shieldmaiden": a short shield after every dash.
+  * Q execute.
+  * W Shield Wall.
+  * E Dernhelm: stealth dash.
+  * R I Am No Man: TRUE damage, and triple against the Witch-king and Nazgûl.
+  * Combo: Théoden hastes, Éomer charges in, Éowyn finishes.
+
+MORDOR (tank / mage / assassin)
+- Gothmog
+  * Passive "Lieutenant of Morgul": orc squads near him +10% armour.
+  * Q Cleave.
+  * W Warg Pack.
+  * E The Age of Men Is Over: FEAR on troops, slow on heroes.
+  * R Siege Fury: siege tag for nearby troops.
+- Witch-king
+  * Passive "No Man Can Kill Me": survives a lethal hit once every 90 s (doesn't
+    work against Éowyn).
+  * Q Morgul Blade: Morgul wound plus damage over time.
+  * W Black Breath: weaken.
+  * E Fell Beast: leap.
+  * R Dread Shriek: fear, then stun.
+- Shelob
+  * Passive "Venom": basic attacks poison.
+  * Q Sting: stun.
+  * W Web: root zone.
+  * E Lurk: stealth leap.
+  * R Feast: heal on kill, bigger on heroes.
+  * Weakness: the Phial of Galadriel item makes her flee.
+  * Combo: Shelob webs, the Witch-king shrieks, Gothmog cleaves the frightened army.
+
+ISENGARD (tank / mage / marksman)
+- Uglúk
+  * Passive "Fighting Uruk": +attack speed below 50% HP.
+  * Q Cleave.
+  * W Bloodlust: unstoppable.
+  * E Leap.
+  * R Uruk Charge.
+- Saruman
+  * Passive "Voice": abilities silence for 0.5 s.
+  * Q Fireball: telegraphed.
+  * W Voice of Saruman: stun.
+  * E Staff Blast: knock-back.
+  * R Fire of Orthanc: channelled, long range.
+- Lurtz
+  * Passive "Hunter": +damage to targets that are slowed or rooted.
+  * Q Heavy Arrow: root.
+  * W Volley.
+  * E Hunter's Stride.
+  * R Uruk Ambush.
+  * Combo: Saruman stuns, Lurtz pins, Uglúk dives.
+
+Matchup notes (Free vs Shadow):
+- Rohan's healing is countered by Morgul wounds.
+- Gondor's armour stacking is countered by Saruman's magic damage.
+- Mordor's fear is countered by Théoden's cleanse.
+- Stealth (Shelob, Faramir) is countered by watchtowers and Faramir's eye.
+
+2.4 Items (rework to LoL depth)
+- About 24 items with components and build paths:
+  * Basic (300) -> mid (800) -> legendary (2500).
+  * Types: physical, magic, tank, support, boots.
+- Every legendary has one unique effect, for example:
+  * Andúril shards: execute range +.
+  * Mithril: tenacity + armour.
+  * Elven cloak: stealth on recall.
+  * Morgul hilt: grievous wounds.
+  * Phial: fear Shelob, reveal stealth.
+- The shop shows "Recommended" per hero.
+- Items cost team Supplies, so buying for your hero competes with the army.
+
+2.5 Objectives and pacing (from v3, sharpened)
+- Lairs: the mine opens, plus a feat.
+- Troll pits: a team buff (the Troll's Strength) plus a big Supplies reward.
+- Forgotten towers: vision, a Supplies trickle and a feat.
+- Siege: the city needs troops. Siege works give rams and catapults.
+- A late-game event (around minute 18): "The Eye turns" or "The Beacons are lit".
+  It's a neutral super objective that grants a decisive army buff, so games end
+  instead of stalling (March of Giants' complaint).
+
+
+3. ART PIPELINE (LATER, AFTER YOUR UPLOADS)
+-------------------------------------------
+- Your 6 characters: rig to the mannequin skeleton with headless Blender, as in 0a.
+  They plug into Art.gd the same way the soldiers do, so swapping is one table entry
+  per hero.
+- BFME mod: take reference only, unless the licence allows more (0b).
+
+
+4. ORDER OF WORK
+----------------
+Each step is shipped and tested before the next.
+ 1. Fix CI: rewrite the rules test and LAN test for 3v3.                         (S)
+ 2. HUD foundation: theme, fonts, 9-slice frames from UI01-16, HUD scale setting. (M)
+ 3. HeroBar: portrait, XP ring, stats, Q W E R with cooldown sweeps, items,
+    HP and mana bars, buffs row.                                                  (M)
+ 4. Minimap move and frame, scoreboard strip, team frames, kill feed and
+    announcements.                                                                (M)
+ 5. Over-head bars, tooltips, cursors.                                            (S)
+ 6. Kingdom panel and shop window redesign; army cards.                           (M)
+ 7. Combat core: damage types, armour and magic resist, CC taxonomy, diminishing
+    returns, unstoppable, shields, Morgul wounds, stealth and reveal.             (L)
+ 8. Abilities as projectiles and telegraphs (dodgeable); channels interruptible.  (M)
+ 9. Passives for all 12 heroes, plus the lore interactions (Éowyn vs Witch-king,
+    Phial vs Shelob...).                                                          (M)
+10. Heroes vs armies rules: cleave bonus, charges vs spears, fear on troops,
+    the Town Center's anti-hero shots.                                            (M)
+11. Items rework with build paths and a recommended list.                         (M)
+12. Late-game super objective.                                                    (S)
+13. Bots learn the new mechanics (dodge telegraphs, focus executes, use cleanse). (M)
+14. Balance pass with 5x speed bot matches, plus a short playtest checklist for you.
+
+Tests: the bot match and rules tests are updated each step; a rendered HUD screenshot
+goes to you after steps 3, 4 and 6 so you can steer the look early.
+
+
+5. QUESTIONS (answer any; otherwise I use the recommended choice)
+-----------------------------------------------------------------
+Q1 BFME assets: reference only (recommended), or a private repo?
+Q2 Hero passives and lore interactions as written above: OK?
+Q3 HUD minimap: bottom right like LoL (recommended), or keep it bottom left?
+Q4 Re-upload the 6 characters as a release, and say which heroes they are.
