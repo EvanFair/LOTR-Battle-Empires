@@ -1,0 +1,640 @@
+BATTLE EMPIRES - DETAILED BUILD PLAN v4 (9 Oct 2026)
+=====================================================
+Copy, don't invent. Every system below names the reference it comes from:
+
+  [LoJ] League-of-Jinx (DaughterOfZaun, commit 4943358)
+        A Godot 4.4 GDScript port of League of Legends' own scripts.
+        Best source for HOW things are built: units, stats, buffs, spells, missiles,
+        attack timing, the HUD widgets.
+        Limits: an early prototype. One champion (Ahri), no minions, no items, no shop,
+        no armour maths, and spatial queries are stubs. No licence and LoL art, so we
+        port its patterns, not its files.
+
+  [OMB] omoba-bevy (o-moba, v0.44)
+        A complete, balanced MOBA with 17 heroes, items, jungle, bosses and towers.
+        Best source for WHAT to build: hero kits and passives, numbers, crowd-control
+        rules, items, objectives.
+        Its art is CC-BY / CC0; we already use its icons and sounds.
+
+  [BFME] Battle for Middle-earth, read through your mod files, with OpenSAGE's data
+         tables (OpenBFME itself only reads the .big archives).
+         Best source for the LOTR RTS layer:
+           - hordes (our squads) with banner carriers, ranks and formations
+           - hero leadership auras
+           - hero power levels, the spellbook (team powers)
+           - unit command buttons and stances
+           - plot-based building
+           - the Palantir HUD
+           - all LOTR names, stats, models, portraits and sounds
+
+Your decisions this plan follows:
+- Personal use only, so BFME assets are fine to use.
+- No army cards. Armies are selected and commanded like BFME / Age of Empires: click
+  or drag-select, then a selection panel with portraits and command buttons.
+- LoL-style HUD with the minimap bottom right. Your teammates (and the enemies you can
+  see) show HP and level.
+- Hero passives and combos copied from the MOBA references, plus hero <-> squad
+  interactions from BFME.
+- Characters and models come later, from your BFME upload (pipeline in Part F).
+
+
+======================================================================================
+PART A - ENGINE FOUNDATIONS (everything else builds on these)
+======================================================================================
+
+A1. Stats system  [LoJ engine/stats.gd + engine/game/balancer.gd]
+  New file: source/lotr/combat/Stats.gd (one per unit).
+  - Every stat = base + per_level * (level-1), then flat bonuses, then percent
+    bonuses, then multiplicative percent bonuses.
+  - Stats: max_hp, hp_regen, max_mana, mana_regen, attack_damage, ability_power,
+    armour, magic_resist, attack_speed, attack_range, move_speed, crit_chance,
+    lifesteal, tenacity, cooldown_reduction (ability haste), and damage_vs_troops,
+    damage_vs_heroes, damage_vs_buildings.
+  - A "temp" layer is cleared and rebuilt every 0.25 s from items, buffs, auras,
+    research and level. This replaces today's scattered apply_buff / recompute_stats
+    / speed_bonus / attack_speed_bonus fields.
+  - Read-only getters (stats.armour, ...) are used everywhere. Old fields stay as thin
+    shims until each user is migrated.
+  - Units with stats: heroes, troops, villagers, creatures, buildings. Buildings only
+    use hp, armour and damage.
+
+A2. Status flags  [LoJ engine/status.gd]
+  - Flags: can_move, can_attack, can_cast, can_be_targeted, stealthed, revealed,
+    unstoppable, invulnerable, cc_immune, silenced, rooted, stunned, feared, taunted,
+    charmed, airborne, grounded (no dashes), disarmed (no basic attacks).
+  - Buffs set and clear the flags; nothing else writes them.
+  - Every order and cast checks the flags. This replaces is_stunned() / is_rooted().
+
+A3. Buff manager  [LoJ engine/buffs/buff.gd, buff_slot.gd, buff_manager.gd]
+  New: source/lotr/combat/Buff.gd, BuffManager.gd, plus buffs/ with one script per
+  buff.
+  - Buff fields:
+    * source unit, key, duration, stacks, max_stacks
+    * type flags: STUN, ROOT, SLOW, SILENCE, FEAR, TAUNT, CHARM, KNOCKUP, DISARM,
+      BLIND, GRIEVOUS, SHIELD, HASTE, AURA, DOT, MARK, STEALTH, UNSTOPPABLE
+    * icon (from our EM status icons and AB ability icons), tooltip
+  - Add types (copied verbatim from LoL via LoJ):
+    * REPLACE_EXISTING
+    * RENEW_EXISTING
+    * STACKS_AND_RENEWS
+    * STACKS_AND_CONTINUE (queued)
+    * STACKS_AND_OVERLAPS (independent copies)
+    * Per-source stacks option ("stacks_exclusive").
+  - Hooks a buff can implement:
+    on_activate, on_deactivate(expired), on_update_stats (feeds A1's temp layer),
+    on_tick(dt), on_before_damage_taken, on_damage_dealt, on_hit (basic attack lands),
+    on_kill, on_death, on_cast.
+  - cleanse(types) removes negative buffs by type. Used by Théoden R and quicksilver-
+    style items.
+  - Replicated to clients as [key, source_id, stacks, remaining] in the slow state
+    (2 Hz), so client HUDs show icons and timers.
+
+A4. Damage pipeline  [LoJ Unit.apply_damage signal chain + OMB mitigation formula]
+  - Combat.deal_damage(src, target, amount, type, source_kind, tags):
+    * type: PHYSICAL, MAGIC, TRUE
+    * source_kind: BASIC, SPELL, DOT, ITEM, TOWER, BUILDING
+    * tags: aoe, siege, execute, no_lifesteal, ...
+  - Order of operations:
+    1. The attacker's on_damage_dealt hooks run (passives such as Aragorn's
+       execute mark, Lurtz bonus vs rooted).
+    2. Multipliers from the tag tables (hero AoE vs troops x1.5, siege vs buildings,
+       troop counters, army heart).
+    3. Mitigation: dmg * 100 / (100 + max(0, armour or MR - penetration)) [OMB].
+       Negative armour amplifies: 2 - 100/(100 - armour). TRUE skips this.
+    4. The target's on_before_damage_taken hooks run (Boromir block, Witch-king
+       death-save, parry).
+    5. Shields absorb next. One shield entry per source; re-casting from the same
+       source stacks up to 2x; the earliest-expiring shield drains first [OMB].
+    6. HP falls; damage numbers and kill credit follow.
+    7. Lifesteal: basic attacks only, capped at 35% [OMB].
+  - Kill credit: an assist window of 10 s per damaging or CC-ing enemy hero, and also
+    for allies who healed or shielded you. Bounties follow D2.
+
+A5. Crowd-control rules  [OMB crowd_control.rs + LoL tenacity]
+  - Root: can still attack and cast; no movement or dashes. Takes the longer of the
+    old and new duration.
+  - Stun, fear, charm, taunt, knock-up: hard CC. A new hard CC overwrites the old one.
+  - Slows: one entry per source; only the strongest applies, with a floor of 30% of
+    base speed.
+  - Tenacity (items, Boromir R, Uglúk W) shortens stun, root, slow, fear and charm.
+    It does not shorten knock-ups (LoL rule).
+  - Diminishing returns on heroes only: the same CC type within 6 s lasts 100%, then
+    50%, then 25%, then the hero is immune for 3 s. Troops have none, so stuns melt
+    armies.
+  - Unstoppable: immune to CC, still takes damage. Spell shield: blocks the next
+    ability (Arwen-style item later).
+
+A6. Spells (abilities)  [LoJ engine/spells/spell.gd + ai_cast_state.gd]
+  New: source/lotr/combat/Spell.gd (base class) and spells/<hero>/<Ability>.gd, one per
+  ability. These replace HeroAbilities.gd's "kind" switch; generic kinds stay as base
+  classes (StrikeSpell, NovaSpell, SkillshotSpell, DashSpell, ...) so per-hero scripts
+  stay short.
+  - State machine: READY -> CASTING (windup 0-0.8 s, can be cancelled by moving if the
+    spell is cancellable) -> CHANNELING (optional) -> COOLDOWN.
+  - Targeting: SELF, UNIT, POINT, DIRECTION (line), CONE, AREA, UNIT_OR_POINT,
+    ALLY_UNIT, ALLY_OR_SQUAD (copied from OMB Frostguard: leap to an allied hero OR
+    an allied squad).
+  - Per-rank data: cooldown, mana, range, damage, AP/AD ratios, effect values.
+    Rank formula from OMB: +10% damage per rank, -6% cooldown per rank, 3 ranks;
+    the ultimate unlocks at level 6.
+  - Recast windows [OMB Stormfist, Dawnweaver, Chainkeeper]: a spell can open a 3 s
+    "recast" with a different effect and cost (for example Aragorn's Q2).
+  - Ammo/charges (OMB Emberveil R: 3 charges). Toggles (Faramir bow/sword stance from
+    OMB Wildspark's weapon toggle).
+  - Cast checks: status flags, range (walk into range first; that already exists),
+    mana, cooldown.
+
+A7. Missiles and areas  [LoJ engine/spells/missiles/* + OMB aim/telegraph]
+  New: source/lotr/combat/Missile.gd with subclasses TargetMissile (homing),
+  LineMissile (skillshot, collides with the first unit or pierces), ArcMissile
+  (lobbed, lands at a point) and ReturnMissile (boomerang, OMB Emberveil Q /
+  Dawnweaver W).
+  - Collision uses our SpatialGrid every physics tick. This is the part LoJ never
+    finished.
+  - Areas: GroundZone (lingering circle with tick damage or slow: Shelob's web,
+    Saruman's fire) and Telegraph (warning circle or line shown to everyone,
+    0.4-0.8 s before impact: Saruman R, troll slam).
+  - Networking: the host sends a spawn RPC (kind, from, to, speed, owner). Clients
+    simulate the flight visually; hits are host-only.
+
+A8. Basic attacks  [LoJ ai_attack_state.gd]
+  - LoL timing: attack_delay = 1 / attack_speed; windup = attack_delay * cast_pct
+    (0.25-0.35 by hero).
+  - A move order during windup cancels the attack (kiting). Ranged attacks become
+    TargetMissiles, speed 19 [OMB].
+  - Crit uses OMB's deterministic meter: each attack adds crit%, and every whole 1.0
+    of meter crits for x1.75.
+  - "On-hit" hooks fire when the hit lands (items, passives).
+
+A9. Unit AI states  [LoJ data/ai/hero.gd]
+  - States: IDLE, MOVE, ATTACK_MOVE, ATTACK (soft/hard), CAST, CHANNEL, FLEE (fear),
+    FORCED_MOVE (taunt/charm), DEAD.
+  - Acquisition scans run on timers (0.25 s), reusing our target-priority table.
+  - The same states drive troops (with horde behaviour, C2) and bots.
+
+
+======================================================================================
+PART B - HUD AND INTERFACE (LoL layout, our Middle-earth art)
+======================================================================================
+Art: our UI kit (UI01-UI16), cut out with background removal and set up as 9-slice
+textures. After your BFME upload, Palantir art and portraits via MappedImage crops (F4).
+Fonts: Cinzel for headings and numbers, Alegreya Sans for body text (both OFL).
+All widgets live in source/lotr/hud/widgets/ and LotrHud.gd only lays them out.
+HUD scale setting: 75-125%.
+
+B1. Champion panel (bottom centre)  [LoJ center.gd, left.gd, bar.tscn; OMB match_hud.rs]
+  - Portrait: round frame UI16, an XP ring (TextureProgressBar, radial fill), a level
+    badge, a death overlay with a respawn countdown, and the passive icon with a
+    tooltip.
+  - Stats column: icons plus numbers for attack damage, ability power, armour, magic
+    resist, attack speed, move speed, crit and haste. Hovering a stat shows how it is
+    built up.
+  - Ability slots QWER [LoJ ui_spell.gd + clock.gd]:
+    * TextureProgressBar with fill_mode = clockwise, using the icon as both under and
+      progress textures, tinted.
+    * Two sweep-edge lines drawn in _draw; a cooldown number (decimals under 1 s);
+      a dark blue overlay when mana is too low.
+    * Rank pips under the slot, and a gold "+" level-up button above when points are
+      free.
+    * A recast glow while a recast window is open; charge counter in the corner.
+    * Key label. Ultimate slot uses the UI04 gold frame.
+  - D / F hero utility slots, B recall slot, 5-8 item slots, all with the same sweep.
+  - HP and mana bars: "991 / 1483" in the middle, regen at the right end ("+2.7").
+    Shield shown as a white segment after the green, plus a red "recently lost" trail.
+  - Buff row above the slots [LoJ ui_buff.gd]: icons with a radial duration fill and a
+    stack count. Debuffs have red borders, buffs green.
+  - Cast/channel bar above the panel while channelling (recall, Fire of Orthanc).
+
+B2. Selection panel  [BFME Palantir + Age of Empires selection panel]
+  - When you select squads, buildings or villagers (click or drag box), the champion
+    panel's centre switches to the selection.
+  - One squad (horde) selected:
+    * Portrait in the frame with name, rank (1-3 stars, see C3), soldier count
+      ("5/6"), banner-carrier icon and HP bar.
+    * Formation buttons (C2), stance buttons (Aggressive / Defensive / Hold Ground),
+      squad abilities (C5), Follow-me (G) and Return.
+    * Upgrade buttons (forged blades and so on), greyed when not researched.
+  - Several squads: a grid of small portraits with mini HP bars, as in Age of Empires.
+    Click one to narrow the selection; Shift-click removes it. The command buttons
+    shown are the ones they share.
+  - A building: its portrait, HP, production queue with progress, train buttons, the
+    rally point, and upgrade buttons.
+  - Villager selection (rare, since they are automatic): Shelter and "work here"
+    buttons.
+  - Space or F1 snaps back to your hero, and the panel returns to the champion layout.
+  - Control groups: Ctrl+1..9 to set, 1..9 to recall, double-tap to centre [AoE/BFME].
+  - A floating info bubble over the selection, as in BFME: name, rank stars and an HP
+    bar.
+
+B3. Minimap (bottom right)  [LoJ minimap/*; OMB minimap.rs]
+  - The map rendered top-down into a texture once, with fog of war multiplied over it.
+  - Icons:
+    * Heroes as their portraits in team-coloured rings.
+    * Squads as dots.
+    * Towers, lairs (with respawn timers), troll pits, city.
+  - The camera frustum outline and your hero's path line [LoJ
+    minimap_overlay_layer.gd]. Left click pans, right click moves.
+  - Ping wheel on Alt+click: "On my way", "Danger", "Attack here", "Missing".
+  - The frame is the UI10 art.
+
+B4. Team frames (right edge)  [LoL; OMB enemy_portraits.rs]
+  - The two allies: portrait, level, HP and mana slivers, ultimate-ready dot, respawn
+    timer when dead. Click to centre the camera, Alt-click to ping.
+  - Enemy heroes in the top-right strip: portrait greyed when out of sight, with
+    their last-seen time and death timers.
+
+B5. Scoreboard and clock (top right) + Tab overlay
+  - Team kills "Free 7 - 4 Shadow", your K/D/A, last hits, game clock and FPS.
+  - Holding Tab: a full table of all 6 heroes (level, K/D/A, last hits, items, total
+    gold earned) and team powers.
+
+B6. Announcements and kill feed (top centre)  [OMB tactical_hud.rs]
+  - Banners: "First Blood", "Enemy slain", "Ally slain", "Shut down", "Double kill",
+    "Tower claimed", "Lair cleared", "Troll slain", "Your city is under attack",
+    "Age advanced".
+  - Each shows the killer and victim portraits, with a sound sting.
+  - The kill feed keeps the last 5 lines on the right under the scoreboard.
+
+B7. Over-head bars  [LoJ healthbar.gd + meter.gd]
+  - Heroes: name, level box, HP bar with a tick every 100 HP, mana sliver, shield
+    segment, and a CC text flash ("Stunned").
+  - Colours: you green, allies blue, enemies red.
+  - Squads: one bar per squad over the banner (horde HP) with rank stars. Soldiers get
+    no individual bars (BFME style), so it stays clean.
+  - Buildings: wide bar with a construction %.
+  - Creatures: neutral yellow.
+  - Damage numbers [LoJ font_emitter]: white physical, blue magic, grey true, red
+    damage taken, gold "+N" for last hits.
+
+B8. Shop  [OMB shop.rs + LoL]
+  - Opened with P at the city (or while the forge is active, OMB Cinderforge's
+    rule).
+  - Left: category tabs (Attack, Magic, Defence, Movement, Consumables).
+  - Middle: an item grid with "Recommended for <hero>" first.
+  - Right: the selected item's build tree (components -> item -> upgrades), with
+    costs adjusted for owned parts [OMB: component cost fully credited], and
+    Buy/Sell/Undo buttons.
+
+B9. Kingdom panel (B key or the city button)
+  - Tabs: Build (a radial menu on build plots, C6), Army, Age, Smithy, and Powers
+    (spellbook, C7).
+  - Steward and Shelter toggles.
+
+B10. Tooltips  [LoL]
+  - Name, key and rank on the first line; cost, cooldown and range on the second.
+  - Description with coloured keywords: physical orange, magic blue, true white,
+    heal green, shield light grey, crowd control purple, stealth grey. Scaling in
+    brackets, for example "(+60% AD)".
+  - Shift shows the full numbers for every rank.
+
+B11. Cursors and feedback
+  - Cursors from UI15: default, attack (sword), ally (hand), cast (target ring),
+    shop and build.
+  - Range indicators, aim shapes, move/attack markers and recall ring already exist;
+    restyle them to the art set.
+
+
+======================================================================================
+PART C - ARMIES THE BFME WAY (hordes, leadership, ranks, formations)
+======================================================================================
+C1. Hordes = our squads  [BFME HordeContain]
+  - A squad becomes a horde object with ranks of soldiers in fixed slots (RankInfo
+    positions) and a banner carrier once it reaches rank 2.
+  - Formation is kept while moving: soldiers move to their slot relative to the
+    banner. One selection and one HP bar for the whole horde; individual soldiers die.
+  - Reinforce: a horde standing in its own city refills missing soldiers for a
+    Supplies cost.
+
+C2. Formations and stances  [BFME HORDE_TOGGLE_FORMATION, TOGGLE_STANCE]
+  - Infantry: Line (default), Shield Wall (+armour, -speed), Wedge (charge, +damage
+    on the first hit).
+  - Spearmen: Pike Wall, which stops cavalry charges (C4).
+  - Archers: Spread (less AoE damage taken) and Fire Arrows (needs an upgrade; extra
+    damage to buildings).
+  - Cavalry: Charge (trample infantry; a knock-back that stuns for 0.5 s).
+  - Stances: Aggressive (chase), Defensive (hold an area), Hold Ground (don't move,
+    +armour).
+
+C3. Ranks and experience  [BFME ExperienceLevel]
+  - Hordes earn XP from kills and from fighting near their hero.
+  - Rank 2: banner carrier, +10% HP. Rank 3: +15% damage, gold trim.
+  - Heroes also gain XP from their hordes' kills (shared).
+
+C4. Unit counters (kept, BFME numbers)
+  - Spears beat cavalry, cavalry beats archers, archers beat infantry, infantry beats
+    spears.
+  - Siege beats buildings, heroes are strong against small hordes, and cave trolls
+    crush infantry [BFME CrusherLevel].
+
+C5. Hero <-> squad interactions  [BFME leadership modules + OMB ally-target spells]
+  - Leadership auras (BFME ModifierList): each hero has an aura for the friendly
+    hordes around it.
+    * Aragorn: +25% damage.
+    * Boromir: +25% armour for Gondor infantry.
+    * Théoden: +20% speed for Rohan cavalry.
+    * Gothmog: +20% damage for orcs.
+    * Uglúk: +20% armour for Uruk-hai.
+    * Saruman: +10% damage for every Isengard unit, map-wide.
+  - Ally-squad targeting [OMB Frostguard leap, Stormfist anchor]:
+    * Boromir's E leaps to an allied squad and shields it.
+    * Éomer's E (Charge) pulls his cavalry hordes with him.
+  - Souls [OMB Chainkeeper]: Gothmog gains stacks from any unit dying within 15 m
+    (+0.5 armour, +0.2 damage each).
+  - Summons are real hordes that obey the selection panel (Army of the Dead, Rangers
+    of Ithilien, Riders of the Mark, Warg Pack, Uruk Ambush).
+  - Combo hordes [BFME ComboHorde]: two allied hordes of the right types merge into a
+    stronger mixed horde.
+    * Gondor soldiers + Gondor archers = Tower Guard.
+    * Rohan spearmen + Westfold bowmen = Rohan Levy.
+    * Orc warriors + orc archers = Mordor Rabble.
+    * Uruk pikes + crossbows = Uruk Phalanx.
+  - "Army loses heart" stays: hordes near their dead hero are weakened.
+
+C6. Building on plots  [BFME CastleBehavior + BASE_FOUNDATION radial menus]
+  - The city gets fixed build plots around the Town Center (like BFME 1). Click a plot
+    to open a radial menu of buildings.
+  - Forgotten towers and lairs get outpost plots once claimed: forward barracks, a
+    well (healing) or a supply camp.
+  - Walls and gates keep today's drag placement.
+
+C7. Team powers (spellbook)  [BFME PlayerTemplate SpellBook + Science points]
+  - Power points come from hero kills, lair clears and tower claims (our "feats").
+  - Each faction has a tree of about 10 powers in 3 tiers, for example:
+    * Gondor: Rally, Healing, Elven Allies, Army of the Dead (ultimate).
+    * Mordor: Eye of Sauron, Darkness, Fell Beast strike, Balrog (ultimate).
+    * Rohan and Isengard: their equivalents.
+  - Each power has a long cooldown; the team picks from them together. This is
+    BFME's best feature and fits our shared team economy.
+
+
+======================================================================================
+PART D - THE 12 HEROES (kits copied from OMB templates + BFME hero powers)
+======================================================================================
+Each hero: a passive and Q/W/E/R. "<= OMB X" names the kit copied; BFME names the
+original LOTR power. Numbers start from the OMB values, scaled to our health pools.
+
+GONDOR
+- Aragorn, fighter/duelist  <= OMB Edgeweaver
+  * Passive "Heir of Isildur": hitting a hero from a new side within 4 s deals bonus
+    true damage and heals (OMB Vitals). His leadership aura gives +25% damage.
+  * Q Andúril Strike: a lunge; hitting a hero refunds 50% of the cooldown (OMB).
+  * W Parry: a 0.75 s parry window; a parried CC empowers the counter to a stun.
+  * E Ranger's Dash: two quick strikes, the first slows.
+  * R Army of the Dead [BFME]: a ghost horde that fears troops it hits; Aragorn is
+    hasted while it lasts.
+- Boromir, tank  <= OMB Frostguard
+  * Passive "Shield of Gondor": every 4th allied hit (any ally or squad) on a target
+    stuns it for 1.25 s, then 7 s immunity (OMB Concussion). He also blocks the first
+    hit every 8 s.
+  * Q Shield Bash: stun.
+  * W Horn of Gondor [BFME]: enemy troops nearby flee for 2 s; allied hordes get +25%
+    armour.
+  * E Shield Leap: to an ally hero or squad; shield + 25 defence (OMB).
+  * R Last Stand: unstoppable, and cannot die for 3 s.
+- Faramir, marksman  <= OMB Wildspark
+  * Passive "Ranger's Eye": after a takedown, +40% move speed and +50% attack speed
+    for 6 s (OMB Momentum). Sees stealthed enemies within 6 m.
+  * Q Bow / Sword toggle [BFME Faramir]: bow = long range; sword = +armour and cleave.
+  * W Mark Target [BFME]: a skillshot; the marked enemy takes +20% damage from all
+    archers and is slowed and revealed.
+  * E Ranger Snares: 3 traps that root heroes (OMB).
+  * R Rangers of Ithilien: summon a ranger horde (stealthed while still).
+
+ROHAN
+- Théoden, support  <= OMB Orbitwright / Cleric
+  * Passive "Lord of the Mark": allied cavalry nearby +20% speed. Consecutive basic
+    attacks stack bonus damage (OMB Clockwork).
+  * Q Herugrim: magic cleave.
+  * W Arise, Riders: heal plus shield in an area.
+  * E Glory [BFME]: a field where allies are hasted and enemies slowed 40% (OMB).
+  * R Ride of the Rohirrim: team haste, cleanse, and a cavalry charge horde.
+- Éomer, fighter/diver  <= OMB Stormfist
+  * Passive "Marshal": after any ability, the next 2 basic attacks get +40% attack
+    speed (OMB Flow). His cavalry hordes follow his charges.
+  * Q Spear Throw: marks; recast to dash to the target for bonus damage plus missing
+    HP (OMB).
+  * W Riders of the Mark: summon.
+  * E Charge: knock-back; it leaves a trampling trail.
+  * R Death!: a war cry that knocks up enemies in a chain (OMB kick knock-up).
+- Éowyn, assassin  <= OMB Veilstalker + Adventurer
+  * Passive "Dernhelm": stealthed after 4 s out of combat unless enemies are within
+    5 m (OMB Shroud); attacks from behind deal x1.1.
+  * Q Shieldmaiden: three recasts, each stacking a mark.
+  * W Shield Wall: a parry/shield.
+  * E Lunge: x1.5 from stealth.
+  * R I Am No Man: an execute; x2 below 30% HP, x3 and true damage against the
+    Witch-king; she becomes untargetable briefly afterwards (OMB).
+
+MORDOR
+- Gothmog, commander/tank  <= OMB Chainkeeper + Cinderforge
+  * Passive "Lieutenant of Morgul": soul stacks (C5); orc hordes nearby +20% damage.
+  * Q Hook: pull an enemy; recast to close the distance.
+  * W Warg Pack: summon.
+  * E The Age of Men Is Over: troops nearby flee, heroes are slowed.
+  * R Siege Fury: a cage (OMB Iron Boundary) where his troops gain siege damage.
+- Witch-king, mage/controller  <= OMB Dawnweaver
+  * Passive "Morgul Wound": hits apply a mark; the next hit detonates it for magic
+    damage and grievous wounds (-50% healing) (OMB Radiance + LoL grievous). Also:
+    survives a lethal blow once per 90 s, but not against Éowyn.
+  * Q Morgul Blade: a skillshot that roots the first 2 it hits.
+  * W Black Breath: a cone that weakens.
+  * E Fell Beast: a leap that leaves a zone slowing 70%.
+  * R Dread Shriek: a 0.8 s telegraph, then fear plus damage that detonates marks.
+- Shelob, diver/assassin  <= OMB Veilstalker
+  * Passive "Venom": basic attacks poison; she regenerates in darkness (stealth).
+  * Q Sting: three spikes.
+  * W Web [BFME cocoon]: a curse; if it lands after 2 s it charms (pulls), earlier
+    it slows.
+  * E Lurk: a stealth gap-closer.
+  * R Feast: an execute below 30% HP, then a retreat; heals on kill.
+  * Weakness: the Phial item makes her flee.
+
+ISENGARD
+- Uglúk, tank/bruiser  <= OMB Cinderforge
+  * Passive "Fighting Uruk": +20 armour and magic resist (Tempered); attack speed
+    rises below 50% HP; Uruk hordes nearby +20% armour.
+  * Q Cleave: a fault line that slows, with a pillar at the end.
+  * W Bloodlust: unstoppable while it lasts, plus a cone that makes targets brittle.
+  * E Charge: stuns if he hits a wall or a building.
+  * R Uruk Charge: knock-up; recastable.
+- Saruman, mage  <= OMB Riftshot + Dawnweaver
+  * Passive "Voice of Saruman": spell hits grant attack speed and reduce his other
+    cooldowns by 1 s (OMB Resonance).
+  * Q Fireball: an arc missile with a telegraph.
+  * W Lightning: a seal that only he can detonate; it refunds mana.
+  * E Staff Blast: knock-back.
+  * R Fire of Orthanc: a channelled, map-wide wave; half damage to non-heroes (OMB
+    Horizon Wave).
+- Lurtz, marksman  <= OMB Riftshot / Ranger
+  * Passive "Hunter": +damage against slowed or rooted targets; attack speed stacks
+    (OMB Resonance).
+  * Q Heavy Arrow: roots on hit.
+  * W Volley.
+  * E Hunter's Stride: a blink plus a shot.
+  * R Uruk Ambush: summon.
+
+Faction combos (the AI and tooltips teach them):
+- Gondor: Boromir's horn breaks the enemy army, Faramir marks, Aragorn duels;
+  Boromir's 4th-hit stun is set up by the squads' hits.
+- Rohan: Théoden's Glory field plus haste, Éomer charges with his cavalry, Éowyn
+  cleans up from stealth.
+- Mordor: the Witch-king's marks, Shelob webs and pulls, Dread Shriek detonates all
+  the marks, Gothmog's souls grow from the slaughter.
+- Isengard: Saruman's seals, Lurtz roots then Uglúk's charge, and the Fire of
+  Orthanc finishes everything.
+
+
+======================================================================================
+PART E - ITEMS, OBJECTIVES, MATCH FLOW
+======================================================================================
+E1. Items  [OMB items.json structure, LOTR names]
+  - Tier 1, 80-150: Elven Blade, Swift Grip, Rohan Boots, Vitality Gem, Focus Charm,
+    Guardian Crest, Crit Shard, Siphon Stone.
+  - Tier 2, 600-700: Windrunner Boots, Dúnedain Edge, Morgul Fang (grievous wounds),
+    Istari Focus, Dwarven Bulwark.
+  - Tier 3, 1400-1500: Andúril Shards, Mithril Coat (tenacity + armour), Phial of
+    Galadriel (reveal, fears Shelob), Palantír Shard, Ring of Barahir.
+  - Rules [OMB]:
+    * 6 slots.
+    * Buy only at the city (or the forge).
+    * Component cost is fully credited.
+    * Move-speed cap +30%.
+    * Supplies are shared: items compete with the army.
+    * "Recommended" build per hero.
+
+E2. Objectives  [OMB jungle and bosses + our lairs]
+  - Lair camps (aggro 7.5, leash 13, respawn 90 s, killer heals 20%):
+    * Spider nest gives Venom: +4 on-hit damage for 45 s (OMB fire buff).
+    * Warg den gives Frost: +2 damage and a 10% slow on hit for 45 s (OMB ice buff).
+  - Troll pits (900 HP, spawn at 60 s, respawn 180 s): the whole team gets +15%
+    damage for 90 s (OMB Wendigo).
+  - A dragon-chain equivalent from minute 4, respawning every 75 s:
+    * First: Fell Beast (+8% speed for the team).
+    * Second: Mûmak (+20 armour).
+    * Third: the Balrog of Moria (1500 HP, +12% damage, and a siege horde for the
+      winners).
+  - Forgotten towers: destroyed in order on each road (OMB tower order), plus the
+    Supplies trickle, vision and an outpost plot.
+
+E3. Match flow numbers (start from OMB)
+  - Respawn: 5 s, then +1.5 s per minute after minute 2, capped at 35 s.
+  - Recall: 7 s.
+  - Hero kill: 300 Supplies minus 60 per victim death streak (minimum 150); assists
+    split 100.
+  - Shutdown bonus for ending a streak.
+  - Passive income 2 Supplies/s per team, plus villagers and lairs (as now).
+  - Heroes: max level 18 (LoL) or 10 (OMB). Recommendation: 13 with ranks at
+    1/3/5/7/9 and the ultimate at 6/11, for 25-minute games.
+
+
+======================================================================================
+PART F - ASSET PIPELINE FOR YOUR BFME FILES (when the upload lands)
+======================================================================================
+F1. Unpack the .big archives:
+    - Python with the "unvivtool" package or a 30-line reader (BIGF/BIG4 layout).
+    - Check for RefPack compression (0x10FB magic); use the OpenSAGE BigTool if it
+      appears.
+F2. Parse the INI files:
+    - A Python port of OpenSAGE's IniParser: #include, #define, #MULTIPLY / #ADD,
+      ChildObject, AddModule / ReplaceModule.
+    - Output JSON per Object, Weapon, Armor, Locomotor, SpecialPower, CommandButton,
+      CommandSet, ExperienceLevel, Upgrade, Science and MappedImage.
+    - tools/bfme/ini_to_json.py fills in GameData tables:
+      * Stats: MaxHealth, Armor percentages, Weapon damage / DelayBetweenShots /
+        AttackRange, Locomotor speed, BuildCost, BuildTime.
+      * Hordes: RankInfo, banner carriers, ComboHorde.
+      * Hero powers and their required levels.
+      * Leadership modifiers.
+      * Display names from lotr.str.
+F3. Models and animations:
+    - Headless Blender plus the OpenSAGE.BlenderPlugin (LGPL, Blender 4.x).
+    - For each unit: import xx_skl, then the skin, then each animation .w3d; export a
+      .glb with every animation as a separate action.
+    - DDS textures converted to PNG with Pillow; textures copied next to the model.
+    - Script: tools/bfme/w3d_to_glb.py, run as
+      blender -b --python w3d_to_glb.py -- <unit>.
+F4. Icons and portraits:
+    - Crop every MappedImage's Coords from its texture atlas, giving hero portraits,
+      button icons and the Palantir art.
+    - Output to assets/bfme/ui/<name>.png; Icons.gd prefers these when present.
+F5. Audio:
+    - Map the AudioEvent "Sounds =" entries to files: unit voices (select, move,
+      attack), hero lines, ability sounds, music.
+    - Hook into Sfx.gd and add a "voice on select / order" feature, as in BFME.
+F6. Art.gd mapping:
+    - One table row per unit or hero: glb path, animation-name map (the BFME
+      IDLEA / RUNA / ATTACKA names to our idle / run / attack), scale and weapon
+      bone.
+    - The mannequin stays as the fallback for anything missing.
+
+
+======================================================================================
+PART G - BOTS, NETWORKING, TESTS
+======================================================================================
+G1. Bots:
+    - Use spells through the same Spell API.
+    - Dodge visible telegraphs and line missiles (step sideways when a missile's path
+      crosses them within 0.6 s).
+    - Focus executes on low-HP heroes. Use cleanse and Last Stand reactively. Combo
+      by faction (D).
+    - Steward also manages formations and team powers for all-bot teams.
+G2. Networking (host-authoritative, as now):
+    - Missile spawn RPCs, buff lists in the slow state, ability state (cooldowns,
+      recast windows, charges), shields and status flags in the fast packet
+      (2 bytes).
+    - Selection is client-only; commands carry net_ids.
+G3. Tests:
+    - Fix CI: rewrite RulesTest and LanTest for 3v3.
+    - New CombatTest:
+      * the mitigation formula
+      * diminishing-returns sequence
+      * shield order
+      * buff add types (each of the five)
+      * missile collision
+      * cooldown sweep
+      * leadership aura
+      * combo horde merge
+    - HudShot: rendered screenshots of the champion panel, selection panel, shop and
+      Tab scoreboard, sent to you for review.
+    - BotMatch 3v3 at 5x speed: the game must end within 25-35 game-minutes.
+
+
+======================================================================================
+PART H - BUILD ORDER (milestones; each one shippable and tested)
+======================================================================================
+M0  CI green again: RulesTest and LanTest for 3v3.                          (S)
+M1  Engine: Stats, Status, BuffManager, damage pipeline, CC rules (A1-A5).
+    Today's abilities run on top unchanged.                                 (L)
+M2  Spells and missiles (A6-A8): port the 12 current kits to Spell scripts
+    with the same behaviour; projectiles become dodgeable.                  (L)
+M3  HUD part 1: theme and fonts, champion panel, over-head bars, damage
+    numbers, tooltips (B1, B7, B10, B11). Screenshot to you.                (M)
+M4  HUD part 2: minimap bottom right, team frames, scoreboard + Tab,
+    announcements and kill feed (B3-B6). Screenshot to you.                 (M)
+M5  Armies the BFME way: hordes with banners, formations, stances, ranks,
+    selection panel and control groups (C1-C4, B2).                         (L)
+M6  The 12 hero kits from Part D: passives, recasts, leadership auras,
+    ally-squad targeting, combo hordes, lore interactions (C5, D).          (L)
+M7  Items and shop (E1, B8).                                                (M)
+M8  Objectives and match flow numbers (E2, E3), plot building and outposts
+    (C6), Kingdom panel (B9).                                               (M)
+M9  Team powers spellbook (C7).                                             (M)
+M10 BFME asset import (F1-F6), as soon as your files arrive. Can run in
+    parallel from M3 on.                                                    (L)
+M11 Bots learn everything (G1); networking pass (G2); balance with 5x
+    bot matches; your playtest checklist.                                   (M)
+
+Rough size: S = an afternoon, M = 1-2 sessions, L = 2-4 sessions.
+I'll push after every milestone and send screenshots at M3, M4, M5 and M10.
+
+
+======================================================================================
+PART I - DECISIONS NEEDED (defaults in brackets; say if you want otherwise)
+======================================================================================
+1. Hero max level: [13, ultimate at 6 and 11] / 18 like LoL / 10 like omoba.
+2. Build plots instead of building anywhere: [plots in the city, like BFME 1;
+   walls stay free-placed].
+3. Team powers spellbook (C7): [yes, M9].
+4. Items: [6 slots like omoba/LoL] (today we have 4).
+5. Minimap: [bottom right, as agreed]; the selection panel replaces the champion
+   panel's centre while armies are selected [yes].
