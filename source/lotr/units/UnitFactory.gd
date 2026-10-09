@@ -322,12 +322,17 @@ static func _create_resource(params):
 	var yaw = rng.randf() * TAU
 	match params.type:
 		"wood":
-			var trees = Art.prop(["trees_A_medium", "trees_B_medium", "trees_A_small"][rng.randi() % 3], 2.3)
-			trees.rotation.y = yaw
-			geometry.add_child(trees)
+			# a small grove of Quaternius trees
+			var kinds = ["nature/Pine_1", "nature/Pine_2", "nature/Pine_3", "nature/CommonTree_1", "nature/CommonTree_2"]
+			for k in range(3):
+				var tree = Art.prop(kinds[rng.randi() % kinds.size()], rng.randf_range(1.1, 1.5))
+				var ang = yaw + TAU * k / 3.0
+				tree.position = Vector3(cos(ang), 0, sin(ang)) * 0.6
+				tree.rotation.y = rng.randf() * TAU
+				geometry.add_child(tree)
 		"stone":
 			for k in range(3):
-				var rock = Art.prop("rock_single_%s" % ["A", "B", "C", "D", "E"][rng.randi() % 5], rng.randf_range(0.7, 1.1))
+				var rock = Art.prop("nature/Rock_Medium_%d" % (1 + rng.randi() % 3), rng.randf_range(0.7, 1.1))
 				rock.position = Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5))
 				rock.rotation.y = rng.randf() * TAU
 				geometry.add_child(rock)

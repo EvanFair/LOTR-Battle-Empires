@@ -6,6 +6,9 @@ extends Node
 const DIRS = ["res://assets/lotr/audio/", "res://assets/omoba/audio/sfx/"]
 const MUSIC = {
 	"battle": "res://assets/omoba/audio/music/arena.ogg",
+	# Abstraction Music Loop Bundle (CC0)
+	"menu": "res://assets/music/menu_reverence.ogg",
+	"lobby": "res://assets/music/lobby_unknown_lands.ogg",
 }
 const MIN_GAP = 0.06  # seconds between two plays of the same clip
 const MAX_VOICES = 24
@@ -100,6 +103,9 @@ func _listener_point(camera: Camera3D) -> Vector3:
 func play_music(key = "battle"):
 	if not enabled or DisplayServer.get_name() == "headless" or not MUSIC.has(key):
 		return
+	if _music_player.playing and _music_player.get_meta("key", "") == key:
+		return
+	_music_player.set_meta("key", key)
 	var stream = load(MUSIC[key])
 	if stream is AudioStreamOggVorbis:
 		stream.loop = true

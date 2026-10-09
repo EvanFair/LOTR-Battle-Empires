@@ -234,7 +234,7 @@ static func building(key: String, faction: String, footprint_radius: float) -> N
 
 static func prop(name: String, target_width: float, tint = Color(1, 1, 1)) -> Node3D:
 	"""Instantiate a medieval-pack model scaled so its footprint is target_width metres wide."""
-	var path = MED_DIR + name + ".gltf"
+	var path = _prop_path(name)
 	var node = _scene(path).instantiate()
 	var size = _footprint(path, node)
 	var s = target_width / max(0.01, max(size.x, size.z))
@@ -246,8 +246,24 @@ static func prop(name: String, target_width: float, tint = Color(1, 1, 1)) -> No
 	return node
 
 
+static func _prop_path(name: String) -> String:
+	# "nature/Pine_1" = Quaternius Stylized Nature MegaKit (CC0) in assets/nature
+	if name.begins_with("nature/"):
+		return "res://assets/" + name + ".gltf"
+	return MED_DIR + name + ".gltf"
+
+
+static func kit(name: String, s = 1.0) -> Node3D:
+	"""A Quaternius modular village/temple piece (CC0, OBJ in assets/kit), s = scale."""
+	var mesh = MeshInstance3D.new()
+	mesh.mesh = load("res://assets/kit/%s.obj" % name)
+	mesh.scale = Vector3.ONE * s
+	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mesh
+
+
 static func prop_height(name: String) -> float:
-	var path = MED_DIR + name + ".gltf"
+	var path = _prop_path(name)
 	if not _sizes.has(path):
 		var n = _scene(path).instantiate()
 		_footprint(path, n)

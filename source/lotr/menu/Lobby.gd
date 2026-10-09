@@ -23,6 +23,8 @@ func _ready():
 	bg.color = Color("14110e")
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	_key_art(self, "lobby")
+	Sfx.play_music("lobby")
 	_build_start_screen()
 	_build_join_screen()
 	_build_lobby_screen()
@@ -212,11 +214,19 @@ func _build_lobby_screen():
 				Network.request_slot_change(i, "kind", ["open", "bot"][idx]))
 		grid.add_child(row.kind)
 		row.faction = OptionButton.new()
+		row.faction.add_theme_constant_override("icon_max_width", 28)
+		row.faction.get_popup().add_theme_constant_override("icon_max_width", 40)
 		for f in GameData.PLAYABLE_FACTIONS:
-			row.faction.add_item(GameData.FACTIONS[f].name)
+			var emblem = Icons.art("emblems", f)
+			if emblem != null:
+				row.faction.add_icon_item(emblem, GameData.FACTIONS[f].name)
+			else:
+				row.faction.add_item(GameData.FACTIONS[f].name)
 		row.faction.item_selected.connect(func(idx): Network.request_slot_change(i, "faction", GameData.PLAYABLE_FACTIONS[idx]))
 		grid.add_child(row.faction)
 		row.hero = OptionButton.new()
+		row.hero.add_theme_constant_override("icon_max_width", 28)
+		row.hero.get_popup().add_theme_constant_override("icon_max_width", 40)
 		row.hero.item_selected.connect(func(idx): Network.request_slot_change(i, "hero", row.hero.get_item_metadata(idx)))
 		grid.add_child(row.hero)
 		row.team = OptionButton.new()
@@ -257,7 +267,11 @@ func _refresh_lobby(slots):
 		var idx = 0
 		for hero_key in GameData.FACTIONS[slot.faction].heroes:
 			if GameData.HEROES.has(hero_key):
-				row.hero.add_item(GameData.HEROES[hero_key].name)
+				var portrait = Icons.art("portraits", hero_key)
+				if portrait != null:
+					row.hero.add_icon_item(portrait, GameData.HEROES[hero_key].name)
+				else:
+					row.hero.add_item(GameData.HEROES[hero_key].name)
 				row.hero.set_item_metadata(idx, hero_key)
 				if hero_key == slot.hero:
 					row.hero.select(idx)
@@ -285,3 +299,21 @@ func _on_match_starting(settings):
 	get_tree().root.add_child(loader)
 	get_tree().current_scene = loader
 	queue_free()
+
+
+func _key_art(parent, name, dim = 0.45):
+	var tex = load("res://assets/art/keyart/%s.webp" % name) if ResourceLoader.exists("res://assets/art/keyart/%s.webp" % name) else null
+	if tex == null:
+		return
+	var art = TextureRect.new()
+	art.texture = tex
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(art)
+	var shade = ColorRect.new()
+	shade.color = Color(0, 0, 0, dim)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(shade)

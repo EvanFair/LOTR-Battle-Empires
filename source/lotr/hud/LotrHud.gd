@@ -21,6 +21,8 @@ var _match = null
 var _root = null
 var _top_label = null
 var _hero_name = null
+var _portrait = null
+var _res_labels = {}
 var _hp_bar = null
 var _mana_bar = null
 var _xp_bar = null
@@ -170,6 +172,16 @@ func _build_top_bar():
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	panel.add_child(row)
+	for res in GameData.RESOURCES:
+		var tex = Icons.art("resources", res)
+		if tex != null:
+			var icon = TextureRect.new()
+			icon.texture = tex
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.custom_minimum_size = Vector2(24, 24)
+			icon.tooltip_text = RES_ICONS[res]
+			row.add_child(icon)
+		_res_labels[res] = _label(row, "", 16)
 	_top_label = _label(row, "", 16)
 	_focus_pick = OptionButton.new()
 	_focus_pick.focus_mode = Control.FOCUS_NONE
@@ -193,10 +205,12 @@ func _refresh_top_bar():
 	var parts = []
 	for res in GameData.RESOURCES:
 		var income = p.income_per_min.get(res, 0)
-		var text = "%s %d" % [RES_ICONS[res], p.get(res)]
+		var text = "%d" % p.get(res)
+		if Icons.art("resources", res) == null:
+			text = "%s %s" % [RES_ICONS[res], text]
 		if income > 0:
 			text += " (+%d/min)" % income
-		parts.append(text)
+		_res_labels[res].text = text
 	if _focus_pick != null:
 		_focus_pick.visible = true
 		for idx in range(_focus_pick.item_count):
@@ -211,9 +225,18 @@ func _refresh_top_bar():
 
 # --- hero panel -------------------------------------------------------------------------------
 func _build_hero_panel():
-	var panel = _panel(_root, Control.PRESET_CENTER_BOTTOM, Vector2(680, 0))
+	var panel = _panel(_root, Control.PRESET_CENTER_BOTTOM, Vector2(780, 0))
+	var outer = HBoxContainer.new()
+	outer.add_theme_constant_override("separation", 8)
+	panel.add_child(outer)
+	_portrait = TextureRect.new()
+	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_portrait.custom_minimum_size = Vector2(96, 96)
+	_portrait.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	outer.add_child(_portrait)
 	var box = VBoxContainer.new()
-	panel.add_child(box)
+	outer.add_child(box)
 	_hero_name = _label(box, "", 16, ACCENT)
 	_hp_bar = _bar(box, Color("c0392b"), 14)
 	_mana_bar = _bar(box, Color("2e6fd8"), 8)
@@ -232,7 +255,7 @@ func _build_hero_panel():
 		var b = _button(col, key, _on_ability_pressed.bind(key), 162)
 		b.custom_minimum_size.y = 46
 		b.add_theme_font_size_override("font_size", 12)
-		b.add_theme_constant_override("icon_max_width", 40)
+		b.add_theme_constant_override("icon_max_width", 42)
 		b.clip_text = true
 		_ability_buttons[key] = b
 	var items_row = HBoxContainer.new()
@@ -270,6 +293,9 @@ func _refresh_hero():
 		h.display_name, h.level, GameData.HEROES[h.hero_key].role, max(0, h.hp) if not h.dead else 0,
 		h.hp_max, int(h.mana), int(h.mana_max)
 	]
+	if _portrait.texture == null:
+		_portrait.texture = Icons.art("portraits", h.hero_key)
+	_portrait.modulate = Color(0.35, 0.35, 0.35) if h.dead else Color.WHITE
 	_hp_bar.max_value = h.hp_max
 	_hp_bar.value = h.hp if not h.dead else 0
 	_hp_bar.tooltip_text = "%d / %d HP" % [h.hp, h.hp_max]
@@ -928,6 +954,14 @@ func show_toast(text: String):
 func show_end_screen(text: String, won: bool):
 	if _end_screen != null:
 		return
+	var path = "res://assets/art/keyart/%s.webp" % ("victory" if won else "defeat")
+	if ResourceLoader.exists(path):
+		var art = TextureRect.new()
+		art.texture = load(path)
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		art.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_root.add_child(art)
 	_end_screen = _panel(_root, Control.PRESET_CENTER, Vector2(420, 180))
 	var box = VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -964,6 +998,7 @@ func play_fx(kind: String, from: Vector3, to: Vector3):
 			_ring(from, ACCENT, 3.0)
 			Sfx.play("arcane", from)
 		"blast":
+			_explosion(from, 0.6)
 			_spark(from, Color(1, 0.55, 0.15), 1.8)
 			_ring(from, Color(1, 0.4, 0.1), 3.5)
 			Sfx.play("blast", from)
@@ -1094,6 +1129,7 @@ func _boulder(from: Vector3, to: Vector3):
 			mesh.global_position = start.lerp(end, t) + Vector3(0, sin(t * PI) * 5.0, 0)
 	var tween = mesh.create_tween()
 	tween.tween_method(arc, 0.0, 1.0, time)
+	tween.tween_callback(func(): _explosion(to, 0.35))
 	tween.tween_callback(func(): _spark(to, Color(0.75, 0.65, 0.5), 1.2))
 	tween.tween_callback(func(): Sfx.play("boulder", to))
 	tween.tween_callback(mesh.queue_free)
@@ -1139,3 +1175,20 @@ func _ring(at: Vector3, color: Color, radius: float):
 	tween.tween_property(mesh, "scale", Vector3.ONE, 0.4)
 	tween.tween_property(mat, "albedo_color:a", 0.0, 0.5)
 	tween.chain().tween_callback(mesh.queue_free)
+
+
+const EXPLOSION_PATH = "res://assets/BinbunVFX_Vol2/ExplosionFX/effects/ground/vfx_ground_explosion_01.tscn"
+static var _explosion_scene = null
+
+
+func _explosion(at: Vector3, size: float):
+	# Stylized Explosion FX by Binbun3D (CC0)
+	if _explosion_scene == null:
+		_explosion_scene = load(EXPLOSION_PATH) if ResourceLoader.exists(EXPLOSION_PATH) else false
+	if not _explosion_scene:
+		return
+	var fx = _explosion_scene.instantiate()
+	fx.scale = Vector3.ONE * size
+	_match.add_child(fx)
+	fx.global_position = at
+	get_tree().create_timer(4.0).timeout.connect(fx.queue_free)

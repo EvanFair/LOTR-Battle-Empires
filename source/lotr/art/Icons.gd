@@ -36,7 +36,27 @@ const ITEMS = {
 static var _cache = {}
 
 
+const ART = "res://assets/art/%s/%s.png"
+static var _ability_art = {}
+
+
+static func art(group: String, key: String) -> Texture2D:
+	"""Nano Banana art from assets/art (tools/art/import_media.py), or null."""
+	var path = ART % [group, key]
+	if not _cache.has(path):
+		_cache[path] = load(path) if ResourceLoader.exists(path) else null
+	return _cache[path]
+
+
 static func ability(a: Dictionary) -> Texture2D:
+	if _ability_art.is_empty():
+		for hero_key in GameData.HEROES:
+			for ab in GameData.HEROES[hero_key].abilities:
+				_ability_art[ab.name] = "%s_%s" % [hero_key, ab.key]
+	if _ability_art.has(a.name):
+		var tex = art("abilities", _ability_art[a.name])
+		if tex != null:
+			return tex
 	var spec = BY_ABILITY.get(a.name, BY_KIND.get(a.kind, ["skills", 0, 2]))
 	var key = "%s/%d/%d" % spec
 	if not _cache.has(key):
@@ -48,6 +68,9 @@ static func ability(a: Dictionary) -> Texture2D:
 
 
 static func item(key: String) -> Texture2D:
+	var tex = art("items", key)
+	if tex != null:
+		return tex
 	var path = "res://assets/omoba/icons/item/%s-32@2x.png" % ITEMS.get(key, "vitality-gem")
 	if not _cache.has(path):
 		_cache[path] = load(path)

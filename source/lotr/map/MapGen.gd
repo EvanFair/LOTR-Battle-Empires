@@ -115,6 +115,19 @@ static func _place_tower_ruins(map):
 		var stone = Art.prop("rock_single_D", 1.2, Color(0.8, 0.8, 0.78))
 		stone.position = site.pos + Vector3(2.2, 0, 1.4)
 		root.add_child(stone)
+		# broken temple columns ring the old tower
+		for k in range(4):
+			var ang = site.pos.x * 0.37 + TAU * k / 4.0 + 0.4
+			var at = site.pos + Vector3(cos(ang), 0, sin(ang)) * 3.3
+			var height = 1 + (k + int(site.pos.z)) % 3
+			for level in range(height):
+				var piece = Art.kit("Pillar_Large_Base" if level == 0 else "Pillar_Large_Middle", 1.2)
+				piece.position = at + Vector3(0, level * 1.2, 0)
+				root.add_child(piece)
+			var rubble = Art.kit("Prop_Rubble_%d" % (1 + k % 2), 1.6)
+			rubble.position = at + Vector3(0.9, 0, 0.5)
+			rubble.rotation.y = ang
+			root.add_child(rubble)
 
 
 static func build_lanes() -> Array:
@@ -348,13 +361,17 @@ static func _place_decorations(map, rng, spawns, lanes):
 	# forests, hills and boulders between the lanes
 	var scenery = [
 		["trees_A_large", 4.5, 5.5], ["trees_B_large", 4.5, 5.5], ["trees_A_medium", 3.0, 4.0],
-		["tree_single_A", 1.2, 1.6], ["tree_single_B", 1.2, 1.6], ["hills_A_trees", 6.0, 8.0],
-		["hills_B_trees", 6.0, 8.0], ["hills_C_trees", 6.0, 8.0], ["rock_single_B", 1.0, 1.6],
-		["rock_single_D", 1.0, 1.6],
+		["nature/CommonTree_1", 2.2, 3.0], ["nature/CommonTree_2", 2.2, 3.0],
+		["nature/CommonTree_3", 2.2, 3.0], ["nature/Pine_1", 1.8, 2.4], ["nature/Pine_2", 1.8, 2.4],
+		["nature/Pine_3", 1.8, 2.4], ["nature/DeadTree_1", 1.8, 2.4], ["nature/TwistedTree_1", 2.2, 2.8],
+		["nature/TwistedTree_2", 2.2, 2.8], ["nature/Bush_Common", 1.0, 1.4],
+		["nature/Bush_Common_Flowers", 1.0, 1.4], ["hills_A_trees", 6.0, 8.0],
+		["hills_B_trees", 6.0, 8.0], ["hills_C_trees", 6.0, 8.0], ["nature/Rock_Medium_1", 1.2, 1.8],
+		["nature/Rock_Medium_2", 1.2, 1.8], ["nature/Rock_Medium_3", 1.2, 1.8],
 	]
 	var placed = 0
 	var attempts = 0
-	while placed < 110 and attempts < 1200:
+	while placed < 140 and attempts < 1500:
 		attempts += 1
 		var p = Vector3(rng.randf_range(4, SIZE - 4), 0, rng.randf_range(4, SIZE - 4))
 		var pick = scenery[rng.randi() % scenery.size()]
@@ -372,3 +389,24 @@ static func _place_decorations(map, rng, spawns, lanes):
 		prop.rotation.y = rng.randf() * TAU
 		root.add_child(prop)
 		placed += 1
+	# roadside waystations: a cart, barrels, a lamp or a well halfway along each road
+	var sets = [["Prop_Cart_1_Hay", "Prop_Barrel_1", "Prop_Lamp_Street"], ["Prop_Well_1", "Prop_Crate_1", "Prop_Hay_1"],
+		["Prop_Cart_1_Barrels", "Prop_Hay_1", "Prop_Barrel_1"]]
+	for lane in lanes:
+		var pts = lane.points
+		if pts.size() < 3:
+			continue
+		var mid = pts[pts.size() / 2]
+		var dir = (pts[pts.size() / 2 + 1] - pts[pts.size() / 2 - 1]).normalized()
+		var side = Vector3(-dir.z, 0, dir.x) * (1 if lane.index % 2 == 0 else -1)
+		var base = mid + side * (LANE_CLEARANCE + 1.8)
+		if camp_sites().any(func(c): return c.pos.distance_to(base) < 7.0):
+			continue
+		if tower_sites().any(func(t): return t.pos.distance_to(base) < 7.0):
+			continue
+		var set = sets[lane.index % sets.size()]
+		for k in range(set.size()):
+			var piece = Art.kit(set[k], 1.15)
+			piece.position = base + dir * (k - 1) * 1.6
+			piece.rotation.y = atan2(dir.x, dir.z) + rng.randf_range(-0.3, 0.3)
+			root.add_child(piece)
