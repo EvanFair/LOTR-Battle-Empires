@@ -1,0 +1,274 @@
+ASSET INTEGRATION PLAN - 9 Oct 2026
+====================================
+Plan only. Nothing has been built yet.
+
+SUMMARY
+Your three uploads arrived safely as releases (not branches): "assets", "People-assets"
+and "world-assets", about 1.15 GB in total. The 2D art is excellent and almost
+complete, so it can go straight into the HUD, menus and loading screens. The 3D packs
+are a mix: the nature kit and weapons are a clear win, and the character packs need a
+short test first.
+
+Two packs have licences that do not allow them in a PUBLIC repo or public release (see
+LICENCES). Please decide on those before anything else.
+
+
+1. WHAT YOU UPLOADED
+--------------------
+media.zip (434 Nano Banana images, 1024px JPG)
+  Every prompt code is covered except the per-unit army sheets AR06-AR28. Those were
+  done instead as turnarounds HT13-HT43, which is fine.
+
+  Group  Count  Use in game
+  -----  -----  -----------
+  HP        12  Hero portraits: HUD hero panel, lobby hero picker, kill toasts.
+                Excellent.
+  AB        51  Ability icons for all 12 heroes plus generic ones. Some have 3
+                variants, and I pick one. Excellent.
+  IC        39  Item and resource icons (lembas, mithril, gold, food...).
+  UI        16  Frames: ability slot, ult slot, item slot, panel, tabs, buttons,
+                minimap frame, tooltip, health bar, portrait frame, cursors.
+                They sit on a white background, so the background has to be
+                removed.
+  EM        24  Faction emblems and banners for the lobby, top bar and minimap.
+  KA        11  Key art: main menu, lobby, loading screens per faction,
+                victory/defeat, logo.
+  BD + 50ish    Building concept art. Used as build-menu pictures, not in the 3D
+  named         world.
+  HT        43  Character turnarounds. Reference only, for future 3D models.
+  SB/PR/TX/      Style boards, props, textures, wild areas, map layout. Mostly
+  WI/MP          reference. TX may become ground textures later.
+
+  Problems to clean up automatically:
+  - All files are JPG, so there is no transparency.
+  - Some have labels, codes or colour swatches baked into a corner.
+  - UI pieces sit on a white or grey background.
+
+People.zip
+  Pack                                   Licence                          Verdict
+  -------------------------------------  -------------------------------  --------
+  Universal Animation Library 1 + 2      CC0                              USE
+  (Quaternius): adult mannequin, 86
+  animations (sword combos, spells,
+  shield, death, farming, chopping...),
+  glTF, Godot-ready
+  Dwarven, Elven, Samurai weapons        CC0                              USE
+  (74 GLB)                                                                elven and
+                                                                          dwarven;
+                                                                          samurai
+                                                                          mostly no
+  Free Medieval 3D People (Craftpix):    Craftpix licence: use in games   SEE
+  14 rigged adult townsfolk (king,       yes, redistributing the source   LICENCES
+  queen, peasants)                       files no
+  Human Basic Motions FREE (Kevin        Unity Asset Store EULA           SEE
+  Iglesias): 120 FBX animations                                           LICENCES
+  Bestiary (Quaternius, free part):      Quaternius licence: use in       SKIP
+  only an Imp and a Puglin               games yes                        (not LOTR)
+
+Low.Polly.Stuff.zip
+  Pack                                   Licence                          Verdict
+  -------------------------------------  -------------------------------  --------
+  Stylized Nature MegaKit (68 glTF:      CC0                              USE
+  trees, pines, dead and twisted trees,
+  rocks, bushes, grass, flowers,
+  mushrooms)
+  ExplosionFX (a ready-made Godot        CC0                              USE
+  effect)
+  Modular Village (155 OBJ: barrels,     No licence file (looks like      USE IF YOU
+  carts, wells, lamps, walls, roofs)     Quaternius CC0)                  CONFIRM
+  and Modular Temple (213 OBJ: ruins,                                     SOURCE
+  pillars)
+  Music Loop Bundle (23 OGG)             CC0                              MAYBE
+                                                                          (modern
+                                                                          sound;
+                                                                          "Reverence"
+                                                                          and "Unknown
+                                                                          Lands" may
+                                                                          fit)
+  City Builder Village Buildings         CC0                              SKIP
+  (4,500 isometric 2D sprite sheets)                                      (2D sprites
+                                                                          don't work
+                                                                          in a 3D
+                                                                          game)
+
+
+2. LICENCES - needs your decision
+---------------------------------
+The GitHub repo is PUBLIC, and so are the three releases. Anyone can download those
+zips right now.
+
+- Human Basic Motions (Unity Asset Store EULA) and the Craftpix People pack allow use
+  inside a finished game. They do NOT allow sharing the raw files publicly. Today they
+  are public in the "People-assets" release.
+- Options:
+  (a) Make the repo private. Releases become private too, and everything can be used.
+      The Windows download would then only be visible to you and collaborators.
+  (b) Keep the repo public. Delete People.zip from the release, re-upload it without
+      those two packs, and I don't use them. Nothing is lost: the Quaternius animation
+      library already covers most of what Human Basic Motions does.
+- My recommendation: (b), unless you want the repo private anyway.
+
+
+3. CEO REVIEW - strategy
+------------------------
+Premises:
+- P1 "The 2D art should replace the current icons and UI." VALIDATED: playtest
+  feedback #15 ("don't like the icons") and your art direction.
+- P2 "The 3D packs should make the world look like the low-poly reference."
+  PARTLY VALIDATED. Nature: yes. Characters: unproven, since the only adult rigged
+  bodies are a faceless mannequin and Craftpix townsfolk.
+- P3 "Heroes can be built from these packs." NOT VALIDATED. None of the packs has
+  Aragorn, orcs, trolls or Nazgul models. The HT turnarounds are pictures, not 3D.
+  Heroes stay on KayKit (recoloured) until real models exist.
+- Riskiest assumption: P3. A half-swapped look, with adult mannequins next to chibi
+  KayKit heroes, could look worse than today. That is why characters get a test first.
+
+Approaches considered:
+  A. 2D first, then nature, then a character test (RECOMMENDED).
+     Biggest visible change for the least risk. Each step can be shipped on its own.
+  B. Everything at once. Faster on paper, but a huge change that is hard to test and
+     risky for the exe build.
+  C. Characters first, using the mannequin and weapons. This is the most "realistic
+     proportions", but faceless mannequins may read worse than KayKit, and it needs
+     your look-and-feel approval before anything else is worth doing.
+
+Scope:
+  IN     2D pipeline. Portraits, ability and item icons, UI frames, emblems, menu
+         and loading art, build-menu pictures.
+  IN     Nature MegaKit trees, rocks and bushes. ExplosionFX for siege, sappers and
+         building collapse.
+  IN     Elven and dwarven weapons, as hero weapon swaps where they fit (Aragorn,
+         Eowyn, Faramir...).
+  SPIKE  One faction's soldiers on the UAL mannequin plus a weapon plus faction
+         colours, compared side by side with KayKit in a screenshot. You decide.
+  DEFER  Village and temple props (licence check). Music swap. Ground textures from
+         TX. Craftpix villagers (licence).
+  REJECT City Builder sprites. Bestiary (Imp/Puglin). Samurai weapons.
+
+
+4. ENG REVIEW - architecture
+----------------------------
+Repo size and build:
+  Never commit the raw zips. Assets are processed into small game-ready files:
+  - icons 128 or 256 px PNG
+  - portraits 256 px
+  - menu and loading art 1280 px WebP
+  - only the 3D models actually used
+  Target: under 40 MB added. The repo is 35 MB today, and the exe grows by about
+  the same amount.
+
+Image pipeline (repeatable, so you can drop in new versions later):
+  tools/art/import_media.py
+  - Reads media.zip, matches codes to game keys (for example HP01 -> aragorn,
+    AB04 -> Aragorn Q), crops out baked labels and swatches, and removes white
+    backgrounds on UI pieces (flood fill from the edges, then soft alpha).
+  - Writes assets/art/{portraits,abilities,items,resources,ui,emblems,keyart,
+    buildings}/<game_key>.png and a manifest of which file came from which code.
+  - Variant choice (AB01/AB02/AB03 have 3 versions) lives in one table that you
+    can edit.
+
+Code changes:
+  - Icons.gd: new art first, then the existing omoba atlas as a fallback, so nothing
+    breaks if an icon is missing.
+  - Art.gd: hero weapon overrides (attach a glb to the hand bone). Nature model table
+    for MapGen decoration and resource trees.
+  - LotrHud.gd:
+    * hero portrait in a round frame (UI13/UI16)
+    * ability slots framed (UI03/UI04)
+    * item slots (UI05)
+    * panel and tooltip StyleBoxTexture 9-slice (UI06/UI11)
+    * resource icons in the top bar
+    * build-menu buttons with building pictures
+    * faction emblem
+  - Lobby.gd and main menu: background key art, hero portraits in the picker,
+    faction emblems.
+  - Loading screen and victory/defeat screens: KA art (a small new scene if none
+    exists).
+  - MapGen.gd: swap KayKit trees and rocks for MegaKit ones per region:
+    * green pines and common trees near Gondor and Rohan
+    * dead and twisted trees near Mordor and Isengard and in the wild
+  - Combat/fx: ExplosionFX scene for sapper blasts, trebuchet hits and building
+    collapse.
+
+Godot specifics:
+  - The .import files are committed (564 today), so I run a headless editor import
+    and commit the new .import files with the assets.
+  - glTF with external .bin and textures imports natively. OBJ imports as a mesh.
+    FBX is avoided; the glTF versions are used.
+  - The weapon GLBs are about 1 unit large, so each needs a per-weapon scale and
+    offset to fit the hand bone.
+
+Performance:
+  - MegaKit trees have more triangles than KayKit ones. Mitigations: keep the same
+    instance counts, use shared meshes, turn off shadows on grass and flowers, and
+    check with the existing PerfProbe.
+  - Textures go through VRAM compression (the project default).
+
+LAN: no impact. Art is client-only and nothing new goes over the network.
+
+Order (each step shippable on its own):
+  1. Pipeline script, processed 2D assets committed, plus a contact sheet for you.
+  2. HUD: portraits, ability and item icons, slot frames, resource icons.
+  3. Menus: main menu and lobby art, emblems, loading and victory screens.
+  4. Build menu pictures, panel and tooltip skin.
+  5. Nature MegaKit in MapGen plus ExplosionFX.
+  6. Hero weapon swaps (elven and dwarven).
+  7. Character test: screenshot of mannequin troops vs KayKit, then your call.
+
+Tests (kept light, as you asked):
+  - Headless import shows no errors.
+  - RulesTest still passes.
+  - One Showcase screenshot per step, sent to you.
+
+Complexity: M (steps 1-6), plus S for the test.
+Risk: LOW for 2D. MEDIUM for nature (performance). Character test risk is in the look.
+
+
+5. DESIGN REVIEW - HUD and menus
+--------------------------------
+In a match (LoL-like layout):
+  - Bottom centre: round portrait (HP, UI16 frame) with level and rank, health and
+    mana bars (UI12 skin), Q W E R slots (UI03, R uses the ult frame UI04),
+    5-8 item slots (UI05).
+  - Greyed icon plus a cooldown sweep when an ability is on cooldown or you lack
+    mana (feedback #12).
+  - Top bar: resource icons (food, wood, stone, iron, gold) instead of text labels,
+    faction emblem on the left.
+  - Base panel: building pictures on the Build tab, with the cost and the existing
+    description tooltip.
+  - Minimap: the UI10 frame (UI02 has a baked-in map, so not that one).
+
+Outside a match:
+  - Main menu: KA11 background plus the KA10 logo.
+  - Lobby: KA12 background. Faction cards with emblems. Hero picker with portraits.
+  - Loading: per-faction art (KA02/05/06/07/13), picked by your faction.
+  - Victory and defeat: KA03 and KA04.
+
+Readability:
+  - Icons get a thin dark rim so they read on any background.
+  - Text stays the existing font, with outline.
+  - Small window sizes: frames scale with the HUD scale factor that already exists.
+
+
+6. DECISIONS (your answers, 9 Oct)
+----------------------------------
+D1 Licences: keep the repo public. Human Basic Motions and Craftpix People are
+   dropped. You remove People.zip from the public release.
+D2 Look: the whole game should be low-poly styled. The character test goes ahead with
+   the goal of a full switch: troops first, then heroes (mannequin body plus weapons,
+   faction colours and simple armour or cloak shapes). If the screenshot works, every
+   faction moves over.
+D3 Village and temple packs are Quaternius (CC0). Their props dress towns, and the
+   temple ruins become the forgotten-tower ruins.
+D4 Music: try 2-3 calm tracks from the loop bundle (menus and the wild). The current
+   battle music stays.
+
+Updated order:
+  1. 2D pipeline
+  2. HUD
+  3. Menus
+  4. Build menu
+  5. Nature, explosions, village/temple props
+  6. Weapons
+  7. Character test (troops) -> full switch
+  8. Music tracks
