@@ -864,8 +864,8 @@ func _cmd_build(cmd):
 		return "You already have %d Village Houses" % GameData.MAX_HOUSES
 	if data.has("max") and p.buildings(key).size() >= data.max:
 		return "You can only have %d %s" % [data.max, data.name]
-	if key == "storehouse" and GameData.now() < p.storehouse_ready_at:
-		return "Storehouse can be rebuilt in %ds" % ceili(p.storehouse_ready_at - GameData.now())
+	if key == "storehouse" and GameData.now() < p.treasury().storehouse_ready_at:  # one cooldown per city
+		return "Storehouse can be rebuilt in %ds" % ceili(p.treasury().storehouse_ready_at - GameData.now())
 	var blocked = placement_blocker(key, pos)
 	if blocked != "":
 		return blocked

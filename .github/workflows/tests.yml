@@ -30,9 +30,9 @@ jobs:
         shell: bash -o pipefail {0}
         run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
 
-      - name: Bot match (free-for-all)
+      - name: Bot match (team, second seed)
         shell: bash -o pipefail {0}
-        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6 --preset=ffa 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
+        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=8 --seed=2024 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
 
       - name: Rules
         shell: bash -o pipefail {0}

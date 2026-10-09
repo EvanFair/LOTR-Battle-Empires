@@ -1,12 +1,12 @@
 extends Node
 ## Headless end-to-end test: 6 bots (3v3) play an offline match on a fixed seed.
-## Run:  godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6
+## Run:  godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6 [--seed=12345]
 ## Exits 0 if the economy, construction, armies and combat all worked, 1 otherwise.
 
 const LoaderScript = preload("res://source/lotr/menu/MatchLoader.gd")
 
 var minutes = 6.0
-var preset = "team"
+var seed_value = 12345
 var _match = null
 var _events = {"spawned": {}, "died": {}, "squads": 0, "constructed": 0}
 var _done = false
@@ -16,19 +16,18 @@ func _ready():
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--minutes="):
 			minutes = float(arg.split("=")[1])
-		elif arg.begins_with("--preset="):
-			preset = arg.split("=")[1]
+		elif arg.begins_with("--seed="):
+			seed_value = int(arg.split("=")[1])
 	Network.leave()
 	Network.reset_slots()
 	for i in range(Network.SLOT_COUNT):
 		Network.slots[i].kind = "bot"
 		Network.slots[i].peer = 0
-	Network.apply_team_preset(preset)
 	MatchSignals.unit_spawned.connect(func(u): _count("spawned", u))
 	MatchSignals.unit_died.connect(func(u): _count("died", u))
 	MatchSignals.unit_construction_finished.connect(func(_u): _events.constructed += 1)
 	var loader = LoaderScript.new()
-	loader.settings = {"slots": Network.slots.duplicate(true), "seed": 12345}
+	loader.settings = {"slots": Network.slots.duplicate(true), "seed": seed_value}
 	get_tree().root.add_child.call_deferred(loader)
 
 
@@ -52,7 +51,7 @@ func _physics_process(_delta):
 
 func _report():
 	var ok = true
-	print("\n===== Bot match report after %.1f game-minutes (%s) =====" % [GameData.now() / 60.0, preset])
+	print("\n===== Bot match report after %.1f game-minutes (seed %d) =====" % [GameData.now() / 60.0, seed_value])
 	for p in _match.players_by_slot.values():
 		var buildings = {}
 		for b in p.buildings():

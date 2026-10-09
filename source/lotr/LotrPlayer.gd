@@ -43,7 +43,7 @@ var age:  # the team's Age (shared through the bank)
 	set(v):
 		treasury()._age = v
 var defeated = false
-var storehouse_ready_at = 0.0  # time (s) when a lost Storehouse may be rebuilt
+var storehouse_ready_at = 0.0  # (bank) time (s) when a lost Storehouse may be rebuilt
 var hero = null
 var bank = null  # the teammate holding the shared city and Supplies (null = this player)
 @export var supplies = 0:
@@ -127,7 +127,7 @@ func on_storehouse_lost():
 	var t = treasury()
 	var lost = int(t.supplies * GameData.STOREHOUSE_LOSS_FACTOR)
 	t.supplies -= lost
-	storehouse_ready_at = GameData.now() + GameData.STOREHOUSE_REBUILD_COOLDOWN
+	t.storehouse_ready_at = GameData.now() + GameData.STOREHOUSE_REBUILD_COOLDOWN  # for the whole team
 	var parts = ["-%d Supplies" % lost]
 	var match_node = get_tree().get_first_node_in_group("lotr_match")
 	if match_node != null:

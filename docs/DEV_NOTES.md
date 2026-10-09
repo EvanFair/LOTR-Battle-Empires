@@ -35,7 +35,7 @@
 - **Screenshots** need xvfb and GL: `xvfb-run -a $G --rendering-driver opengl3 --resolution 1600x900 --path . res://tests/auto/V3Shot.tscn -- --out=/some/dir`
 - **Noise to ignore:** headless runs print shader errors "Unknown character #35" (pre-existing fog shaders), "Parameter m is null" and RID leak messages at exit.
 - **Killing a stuck Godot:** never use `pkill -f` (it kills your own shell). Use `for p in /proc/[0-9]*; do c=$(cat $p/comm 2>/dev/null); case "$c" in Godot*) kill ${p#/proc/};; esac; done`
-- **CI:** `.github/workflows/tests.yml` runs BotMatch (team and ffa presets), Rules, then LAN.
+- **CI:** `.github/workflows/tests.yml` runs BotMatch (two seeds, 3v3), Rules, then LAN.
 
 ## Conventions
 - GDScript, tabs, no static typing required; match the surrounding style and comment density.

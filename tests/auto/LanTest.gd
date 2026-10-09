@@ -2,9 +2,10 @@ extends Node
 ## Headless LAN test. Start two copies of the game:
 ##   godot --headless --fixed-fps 60 --path . res://tests/auto/LanTest.tscn -- --role=host
 ##   godot --headless --fixed-fps 60 --path . res://tests/auto/LanTest.tscn -- --role=client
-## The client joins 127.0.0.1, both play slot 0 (host) and slot 1 (client) with 2 bots.
+## The client joins 127.0.0.1; host is slot 0 (the team 1 bank) and the client slot 1 (its teammate),
+## the other four slots are bots (3v3).
 ## The client drives its hero with commands and checks the host's simulation shows up:
-## same units, its hero moved where it asked, resources replicated. Exits 0 on success.
+## same units, its hero moved where it asked, the team chest replicated. Exits 0 on success.
 
 const LoaderScript = preload("res://source/lotr/menu/MatchLoader.gd")
 
@@ -13,6 +14,7 @@ var seconds = 40.0
 var _match = null
 var _started = false
 var _move_target = Vector3.ZERO
+var _move_start = Vector3.ZERO
 var _sent_move = false
 var _wall_start = 0
 
@@ -66,6 +68,7 @@ func _physics_process(_delta):
 		return
 	if role == "client" and not _sent_move and GameData.now() > 5.0:
 		_sent_move = true
+		_move_start = me.hero.global_position
 		_move_target = me.hero.global_position + Vector3(6, 0, 6)
 		CommandBus.submit({"type": "hero_move", "player": me.slot_index, "pos": _move_target})
 		print("[client] asked hero to move to %s" % _move_target)
@@ -78,18 +81,23 @@ func _finish():
 	var me = _match.local_player
 	var units = get_tree().get_nodes_in_group("units").size()
 	var buildings = get_tree().get_nodes_in_group("buildings").size()
-	print("[%s] t=%.0fs units=%d buildings=%d my hero at %s, food=%d wood=%d" % [
-		role, GameData.now(), units, buildings, me.hero.global_position, me.food, me.wood])
-	var ok = units > 30 and buildings >= 30
+	var chest = me.treasury().supplies
+	print("[%s] t=%.0fs units=%d buildings=%d my hero at %s, team chest=%d (bank slot %d)" % [
+		role, GameData.now(), units, buildings, me.hero.global_position, chest, me.treasury().slot_index])
+	# two cities start with 8 buildings each; the Stewards add more within 30 s
+	var ok = units > 30 and buildings >= 20 and me.treasury().team == me.team
 	if role == "client":
+		# the client is the bank's teammate: it shares the host's city and chest
+		ok = ok and me.bank != null and me.bank.slot_index == 0 and me.bank.peer_id == 1
 		var d = me.hero.global_position.distance_to(_move_target)
-		print("[client] hero is %.2fm from where I sent it" % d)
-		ok = ok and d < 1.5
+		print("[client] hero is %.2fm from where I sent it (moved %.1fm)" % [d, me.hero.global_position.distance_to(_move_start)])
+		ok = ok and d < 2.5 and me.hero.global_position.distance_to(_move_start) > 4.0
 		var any_villager_moved = false
 		for u in get_tree().get_nodes_in_group("units"):
 			if u.unit_kind == "villager" and u.puppet:
 				any_villager_moved = true
-		ok = ok and any_villager_moved and (me.food != GameData.STARTING_RESOURCES.food or me.wood != GameData.STARTING_RESOURCES.wood)
+		# the chest started at the starting Supplies and the Steward spends it, so it must have changed
+		ok = ok and any_villager_moved and chest != GameData.STARTING_RESOURCES.supplies
 	print("[%s] RESULT: %s" % [role, "PASS" if ok else "FAIL"])
 	await get_tree().create_timer(1.0).timeout
 	get_tree().quit(0 if ok else 1)
