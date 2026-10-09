@@ -229,18 +229,15 @@ func _build_lobby_screen():
 		row.hero.get_popup().add_theme_constant_override("icon_max_width", 40)
 		row.hero.item_selected.connect(func(idx): Network.request_slot_change(i, "hero", row.hero.get_item_metadata(idx)))
 		grid.add_child(row.hero)
-		row.team = OptionButton.new()
-		for t in range(1, Network.SLOT_COUNT + 1):
-			row.team.add_item("Team %d" % t)
-		row.team.item_selected.connect(func(idx): Network.request_slot_change(i, "team", idx + 1))
+		row.team = Label.new()
+		row.team.text = "Team %d" % Network.team_of_slot(i)
+		row.team.add_theme_color_override("font_color", Color("8fb4ff") if Network.team_of_slot(i) == 1 else Color("ff8a7a"))
 		grid.add_child(row.team)
 		_slot_rows.append(row)
 	_preset_row = HBoxContainer.new()
 	box.add_child(_preset_row)
-	_btn(_preset_row, "Preset: Free Peoples vs Shadow (2v2)", func(): Network.apply_team_preset("team"))
-	_btn(_preset_row, "Preset: Free-for-all", func(): Network.apply_team_preset("ffa"))
 	var info = Label.new()
-	info.text = "Slots 1-4 start in the NW, NE, SW and SE corners. The edge between allies is a safe route."
+	info.text = "3 v 3. Each team is one people and shares one city and one war chest of Supplies. Team 1 holds the south-west city, Team 2 the north-east. Picking a faction changes it for the whole team; every hero is taken once."
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD
 	box.add_child(info)
 	_start_button = _btn(box, "Start match", _on_start)
@@ -261,7 +258,6 @@ func _refresh_lobby(slots):
 		var open = slot.kind == "open"
 		row.faction.disabled = not editable or open
 		row.hero.disabled = not editable or open
-		row.team.disabled = not editable or open
 		row.faction.select(GameData.PLAYABLE_FACTIONS.find(slot.faction))
 		row.hero.clear()
 		var idx = 0
@@ -276,7 +272,6 @@ func _refresh_lobby(slots):
 				if hero_key == slot.hero:
 					row.hero.select(idx)
 				idx += 1
-		row.team.select(slot.team - 1)
 	_preset_row.visible = is_host
 	_start_button.visible = is_host
 	_start_button.disabled = not Network.can_start()

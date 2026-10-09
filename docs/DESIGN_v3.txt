@@ -1,0 +1,119 @@
+BATTLE EMPIRES - DESIGN v3 (9 Oct 2026)
+=========================================
+Built from your research notes (Age of Empires I, League of Legends, WorldQuest,
+SpellForce 3, March of Giants), plus a check of what players and critics actually say
+about those three games.
+
+
+WHAT THE RESEARCH SAYS
+----------------------
+WorldQuest (71% of 87 Steam reviews)
+- Proved that fighting and building can share one team purse. Every purchase is a
+  trade-off.
+- Small and repetitive. It shows the idea can work, not how to make it big.
+
+SpellForce 3
+- Critics loved the hero, RPG and dungeon side.
+- They disliked the RTS side: "toss the blob of paper-weak soldiers at enemies while
+  using hero spells". It ends in deathballs, units have only "two modes", and the
+  hero can win alone.
+- Lesson: heroes must open the way, but armies and siege are needed to take a base.
+
+March of Giants (playtesting now)
+- The giant automatically rallies soldiers who follow it, so armies need no
+  micromanagement. We copy this.
+- Problems reported:
+  * The building layer made lanes stall into drawn-out stalemates. Lesson: buildings
+    should push the pace, not only defend.
+  * Neutral objectives had too little impact.
+  * Item power flattened out after 30 minutes.
+  * A giant near an outpost could hold off several enemies.
+
+Age of Empires and LoL
+- Keep: villagers gather from a map that runs out, ages unlock content, LoL-style
+  hero control, last hits, recall and the shop.
+- Drop: four separate stockpiles. One team treasury makes every choice compete
+  (research recommendation).
+
+Battle for Middle-earth
+- Players praise fighting over good build spots. Our version: rich mines are guarded
+  by monster lairs.
+
+
+THE GAME IN ONE SENTENCE
+------------------------
+Three heroes per side fight, hunt and claim the land. Every kill and every cleared
+lair fills ONE shared war chest ("Supplies"). That chest pays for hero items, troops,
+buildings and the next Age. The first side to break the other's city wins.
+
+
+DECISIONS
+---------
+1. Two teams, three heroes each (3v3)
+   - A team is one faction (Gondor, Rohan, Mordor or Isengard).
+   - Its three players take that faction's three heroes, one each, with no repeats.
+   - Empty slots are filled by bots.
+
+2. One shared base per team, LoL-style diagonal map
+   - Bases sit in the bottom-left and top-right corners.
+   - Three roads (top, middle, bottom) run between them, each with forgotten towers
+     to claim.
+   - Two jungles, one per side, plus a contested middle with the Cave Troll lair.
+   - Win by destroying the enemy Town Center, which stays open on all sides. You
+     need an army or siege for it, because the Town Center defends itself
+     strongly against heroes.
+
+3. One currency: SUPPLIES, shared by the team
+   - Everything costs Supplies: buildings, troops, Ages, research and hero items.
+   - Every teammate can spend, and the HUD shows who bought what.
+   - Income sources:
+     * Villagers depositing loads. A rich mine pays more per load than a field.
+     * Hero kills of enemy troops: a small reward always, bigger when a hero lands
+       the last hit.
+     * Hero kills of enemy heroes.
+     * Jungle camps: large rewards.
+     * Claimed forgotten towers: a trickle while held.
+     * A small passive income.
+   - Target from the research: about 60% of income should come from active hero play.
+
+4. Hero-led economy
+   - The richest resource sites (stone and iron mines) sit inside monster lairs.
+     Villagers will not work a guarded site until a hero clears the lair.
+   - The lair respawns after a while, so heroes keep returning to protect it.
+   - Clearing camps and claiming towers is where the gold comes from.
+
+5. Villagers fully automatic
+   - Villagers pick the best safe site themselves, weighted by its value per trip.
+   - The only control is a Shelter button.
+   - The Steward (on by default) builds houses and the core buildings, so the
+     heroes can stay out on the map. You can turn it off and build yourself.
+
+6. Armies follow their hero (March of Giants)
+   - Squads you train belong to you and march with your hero by default (Follow me).
+   - Simple orders remain: hold, attack-move, march a road, return.
+   - Counters from v2 stay (spear vs riders and so on), so armies don't become a
+     deathball.
+   - "Army loses heart" stays: a hero's own squads fight worse while that hero is
+     dead.
+
+7. Pace
+   - Aim for 20-30 minute matches.
+   - Buildings are offensive as well as defensive (siege works, forward camp) to
+     avoid stalemates.
+   - Ages need Supplies plus at least one cleared lair or claimed tower, so
+     progress needs action, not just waiting.
+
+8. Look: everything low-poly
+   - Quaternius low-poly people (realistic proportions) for all soldiers and heroes,
+     with CC0 weapons and faction colours.
+   - Nature and village kits stay.
+
+
+DEFERRED (next versions)
+------------------------
+- Three strongholds per side.
+- Elves and Dwarves factions.
+- A campaign.
+- Spending approval or reservations (for now a purchase feed is enough).
+- Comeback bonuses (test first whether objectives already give enough comeback).
+- Vision-culled LAN.

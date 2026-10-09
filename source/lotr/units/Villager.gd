@@ -121,8 +121,9 @@ func _head_to_drop():
 
 func _deposit():
 	if carrying_amount > 0:
-		player.add_resources({carrying_type: carrying_amount})
-		player.note_income(carrying_type, carrying_amount)
+		# v3: villagers are the steady half of the economy; heroes earn the rest
+		player.add_resources({carrying_type: int(round(carrying_amount * GameData.VILLAGER_YIELD))})
+		player.note_income(carrying_type, int(round(carrying_amount * GameData.VILLAGER_YIELD)))
 	carrying_amount = 0
 	carrying_type = ""
 	# on the way back out, carry supplies to a military building if one is waiting
@@ -220,9 +221,12 @@ func _valid(node) -> bool:
 func _closest_resource(type: String):
 	var best = null
 	var best_d = INF
+	var match_node = get_tree().get_first_node_in_group("lotr_match")
 	for node in get_tree().get_nodes_in_group("lotr_resources"):
 		if node.resource_type != type or node.is_depleted():
 			continue
+		if match_node != null and match_node.site_guarded(node.global_position):
+			continue  # a monster lair: a hero has to clear it first
 		var d = node.global_position.distance_squared_to(global_position)
 		if d < best_d:
 			best_d = d

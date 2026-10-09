@@ -1,5 +1,5 @@
 extends Node
-## Headless end-to-end test: 4 bots play an offline match on a fixed seed.
+## Headless end-to-end test: 6 bots (3v3) play an offline match on a fixed seed.
 ## Run:  godot --headless --fixed-fps 60 --path . res://tests/auto/BotMatchTest.tscn -- --minutes=6
 ## Exits 0 if the economy, construction, armies and combat all worked, 1 otherwise.
 
@@ -71,7 +71,7 @@ func _report():
 		if buildings.get("village_house", 0) < 2:
 			print("   FAIL: expected at least 2 finished houses")
 			ok = false
-		if villagers < 5:
+		if villagers < 5 and p.bank == null:  # teammates share the bank's city
 			print("   FAIL: expected villagers")
 			ok = false
 	print("events: spawned %s" % _events.spawned)

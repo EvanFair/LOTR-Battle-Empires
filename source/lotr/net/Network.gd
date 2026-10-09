@@ -1,6 +1,6 @@
 extends Node
 ## LAN multiplayer: ENet host/join, automatic game discovery on the local network, and the
-## shared 4-slot lobby. The host is authoritative: it owns the lobby and runs the match.
+## shared 3v3 lobby (slots 0-2 = team 1, 3-5 = team 2). The host is authoritative: it owns the lobby and runs the match.
 
 signal lobby_changed(slots)
 signal games_found_changed(games)
@@ -12,8 +12,9 @@ signal match_starting(settings)
 
 const GAME_PORT = 24565
 const DISCOVERY_PORT = 24566
-const MAX_CLIENTS = 3
-const SLOT_COUNT = 4
+const MAX_CLIENTS = 5
+const SLOT_COUNT = 6
+const TEAM_SIZE = 3
 const BROADCAST_INTERVAL = 1.0
 const GAME_TIMEOUT_MS = 3500
 
@@ -119,29 +120,28 @@ func stop_discovery():
 # --- lobby ------------------------------------------------------------------------------------
 func reset_slots():
 	slots = []
-	var presets = [
-		["gondor", 1, "aragorn"], ["mordor", 2, "gothmog"],
-		["rohan", 1, "theoden"], ["isengard", 2, "lurtz"],
-	]
 	for i in range(SLOT_COUNT):
+		var team = team_of_slot(i)
+		var faction = "gondor" if team == 1 else "mordor"
 		slots.append(
 			{
 				"kind": "bot", "peer": 0, "name": "Bot %d" % (i + 1),
-				"faction": presets[i][0], "team": presets[i][1], "hero": presets[i][2],
+				"faction": faction, "team": team, "hero": faction_heroes(faction)[i % TEAM_SIZE],
 			}
 		)
 	slots[0] = _human_slot(1, player_name, slots[0])
 
 
-func apply_team_preset(preset: String):
-	"""'team' = Free Peoples vs Shadow (teams 1 and 2), 'ffa' = everyone on their own team."""
-	for i in range(SLOT_COUNT):
-		if preset == "ffa":
-			slots[i].team = i + 1
-		else:
-			var side = GameData.FACTIONS[slots[i].faction]["side"]
-			slots[i].team = 1 if side == "free" else 2
-	_emit_lobby()
+static func team_of_slot(i: int) -> int:
+	return 1 if i < TEAM_SIZE else 2
+
+
+static func faction_heroes(faction: String) -> Array:
+	return GameData.FACTIONS[faction]["heroes"].filter(func(h): return GameData.HEROES.has(h))
+
+
+func apply_team_preset(_preset: String):
+	pass  # v3: always two teams of three
 
 
 func request_slot_change(slot_index: int, field: String, value):
@@ -166,7 +166,7 @@ func can_start():
 	for slot in slots:
 		if slot.kind != "open":
 			teams[slot.team] = true
-	return teams.size() >= 2
+	return teams.size() >= 2  # both sides need at least one hero
 
 
 func start_match():
@@ -201,14 +201,20 @@ func _apply_slot_change(slot_index: int, field: String, value, sender: int):
 		"faction":
 			if not GameData.PLAYABLE_FACTIONS.has(value):
 				return
-			slot.faction = value
-			slot.hero = GameData.FACTIONS[value]["heroes"].filter(
-				func(h): return GameData.HEROES.has(h)
-			)[0]
+			# a team is one people: the whole side changes faction, each slot keeps a
+			# different one of its three heroes
+			var heroes = faction_heroes(value)
+			for i in range(slots.size()):
+				if slots[i].team == slot.team:
+					slots[i].faction = value
+					slots[i].hero = heroes[i % TEAM_SIZE]
 		"team":
-			slot.team = clampi(int(value), 1, SLOT_COUNT)
+			return  # fixed by slot in v3
 		"hero":
 			if GameData.HEROES.has(value) and GameData.HEROES[value]["faction"] == slot.faction:
+				for other in slots:
+					if other != slot and other.team == slot.team and other.hero == value:
+						other.hero = slot.hero  # swap with the teammate who had it
 				slot.hero = value
 		"name":
 			slot.name = str(value).left(16)

@@ -1,7 +1,10 @@
 extends Node
-## A computer player. Runs on the host and only issues the same Commands a human could.
-## Build order -> stand at foundations -> villagers on resources -> Age II -> auto-repeat
-## squadrons down enemy lanes -> push with the hero, retreat when hurt, defend the base.
+## A computer player and the team Steward. Runs on the host and only issues the same Commands
+## a human could.
+## - Steward (the team bank, human or bot, while "steward" is on): builds houses and the core
+##   buildings and advances the Age from the shared war chest, keeping a reserve for the heroes.
+##   On an all-bot team it also researches and sets the barracks marching.
+## - Bot hero: hunts camps, claims forgotten towers, pushes its road, retreats when hurt.
 
 const THINK_INTERVAL = 1.0
 const BUILD_ORDER = [
@@ -15,7 +18,8 @@ const ASSIGNMENT_PLAN = [
 	"food", "wood", "food", "iron", "stone", "food", "wood", "iron", "food", "stone"
 ]
 const RETREAT_HP = 0.3
-const PUSH_AFTER = 150.0  # seconds before the hero leaves the base to fight
+const PUSH_AFTER = 8.0  # seconds before the hero leaves the base to fight
+const HUMAN_RESERVE = 250  # Supplies the Steward leaves for a human team's heroes
 
 var player = null
 var _think_left = 1.0
@@ -33,7 +37,9 @@ func _ready():
 
 
 func _physics_process(delta):
-	if player == null or player.defeated or _match.ended or not player.is_bot:
+	if player == null or player.defeated or _match.ended:
+		return
+	if not player.is_bot and not (player.bank == null and player.steward):
 		return
 	_elapsed += delta
 	_think_left -= delta
@@ -59,13 +65,15 @@ func _tc():
 
 
 func _think():
-	var hero = _hero()
 	var tc = _tc()
-	if hero == null or tc == null:
+	if tc == null:
 		return
-	_assign_villagers()
-	_configure_military()
-	if not hero.is_alive():
+	if player.bank == null and player.steward:
+		_steward(tc)
+	if not player.is_bot:
+		return
+	var hero = _hero()
+	if hero == null or not hero.is_alive():
 		return
 	_use_abilities(hero)
 	_shop(hero)
@@ -77,26 +85,28 @@ func _think():
 		_cmd({"type": "hero_attack", "target": threat.net_id})
 		_order_nearby_squads(hero, "attack", threat)
 		return
-	var site = _unfinished_site()
-	if site != null:
-		_stand_at(hero, site)
-		return
-	if tc.age_target > 0:
-		_stand_at(hero, tc)
-		return
-	if _advance_build_order(hero, tc):
-		return
 	if _elapsed > PUSH_AFTER:
 		_push(hero, tc)
 
 
+func _steward(tc):
+	var full = player.is_bot  # an all-bot city also researches and marches its barracks
+	if full:
+		_configure_military()
+	for i in range(3):  # a few cheap steps per think
+		if not _advance_build_order(tc, full):
+			break
+	# build order done and the chest is overflowing: an all-bot city adds production
+	if full and _order_index >= BUILD_ORDER.size() and player.treasury().supplies > 1500:
+		for key in ["barracks", "archery_range", "stables", "siege_works"]:
+			if GameData.BUILDINGS[key].age <= player.age and player.buildings(key).size() < 3 and _affordable(GameData.BUILDINGS[key].cost):
+				var spot = _find_spot(key, tc)
+				if spot != null:
+					_cmd({"type": "build", "building": key, "pos": spot})
+				break
+
+
 # --- economy ------------------------------------------------------------------------------------
-func _assign_villagers():
-	# villagers are automatic; bots just point the focus at whatever the next step lacks
-	var short = _next_step_shortfall().filter(func(r): return r in GameData.GATHERABLE)
-	var want = short[0] if not short.is_empty() else "balanced"
-	if player.focus != want:
-		_cmd({"type": "assign_villagers", "assignment": want})
 
 
 func _next_step_shortfall() -> Array:
@@ -110,11 +120,7 @@ func _next_step_shortfall() -> Array:
 		cost = GameData.UPGRADES[step.substr(2)].cost
 	else:
 		cost = GameData.BUILDINGS[step].cost
-	var short = []
-	for res in cost:
-		if player.get(res) < cost[res]:
-			short.append(res)
-	return short
+	return [] if player.has_resources(cost) else ["supplies"]
 
 
 func _configure_military():
@@ -135,7 +141,7 @@ func _enemy_lanes() -> Array:
 	for t in _match.lanes_for_player(player):
 		if t.kind != "base":
 			continue
-		var other = _match.player_for_slot(t.slot)
+		var other = _match.team_bank(t.team)
 		if other != null and not other.defeated and Teams.is_enemy(other, player):
 			result.append(t.index)
 	return result
@@ -174,20 +180,27 @@ func _stand_at(hero, building):
 		_cmd({"type": "hero_move", "pos": building.global_position + Vector3(building.stats_size() + 1.2, 0, 0)})
 
 
-func _advance_build_order(hero, tc) -> bool:
+func _affordable(cost) -> bool:
+	var reserve = 0 if player.is_bot else HUMAN_RESERVE
+	return player.treasury().supplies - reserve >= GameData.price(cost)
+
+
+func _advance_build_order(tc, full) -> bool:
 	if _order_index >= BUILD_ORDER.size():
 		return false
 	var step = BUILD_ORDER[_order_index]
+	if step.begins_with("R:") and not full:
+		_order_index += 1  # a human team picks its own research
+		return true
 	if step.begins_with("AGE"):
 		var target = int(step.substr(3))
 		if player.age >= target:
 			_order_index += 1
 			return false
-		if not player.has_resources(GameData.AGES[target].cost):
-			return target == 2  # Age II is worth waiting for; Age III gathers while fighting
-		if not player.in_base(hero.global_position):
-			_stand_at(hero, tc)
-			return true
+		if player.treasury().feats + _match._team_towers(player) < GameData.AGES[target].get("feats", 0):
+			return false  # the heroes have to earn the Age first
+		if tc.age_target > 0 or not _affordable(GameData.AGES[target].cost):
+			return false
 		_cmd({"type": "advance_age"})
 		return true
 	if step.begins_with("R:"):
@@ -198,11 +211,8 @@ func _advance_build_order(hero, tc) -> bool:
 			return false
 		if GameData.UPGRADES[key].age > player.age or smiths[0].research_key != "":
 			return false
-		if not player.has_resources(GameData.UPGRADES[key].cost):
+		if not _affordable(GameData.UPGRADES[key].cost):
 			return false
-		if not player.in_base(hero.global_position):
-			_stand_at(hero, tc)
-			return true
 		_cmd({"type": "research", "upgrade": key})
 		_order_index += 1
 		return true
@@ -212,21 +222,18 @@ func _advance_build_order(hero, tc) -> bool:
 	if step == "village_house" and player.buildings("village_house").size() >= GameData.MAX_HOUSES:
 		_order_index += 1
 		return false
-	if not player.has_resources(data.cost):
+	if not _affordable(data.cost):
 		# waiting a long time on one step: grow the economy with another house meanwhile
 		_stall += 1
 		if _stall > 60 and step != "village_house":
 			var houses = player.buildings("village_house").size()
-			if houses < GameData.MAX_HOUSES and player.has_resources(GameData.BUILDINGS.village_house.cost) and player.in_base(hero.global_position):
+			if houses < GameData.MAX_HOUSES and _affordable(GameData.BUILDINGS.village_house.cost):
 				var spot = _find_spot("village_house", tc)
 				if spot != null:
 					_cmd({"type": "build", "building": "village_house", "pos": spot})
 					_stall = 0
 					return true
 		return false  # wait and gather
-	if not player.in_base(hero.global_position):
-		_stand_at(hero, tc)
-		return true
 	var spot = _find_spot(step, tc)
 	if spot == null:
 		_order_index += 1
@@ -273,11 +280,11 @@ func _push(hero, tc):
 		_order_nearby_squads(hero, "attack", enemy)
 		return
 	if my_squads.is_empty():
-		# no army in the field: farm the nearest jungle camp while healthy, else wait at home
-		if hero.hp > hero.hp_max * 0.65 and (_claim_tower(hero) or _hunt(hero)):
+		# no army in the field: claim towers and clear lairs (that is where the Supplies are),
+		# else walk this hero's road towards the enemy city
+		if hero.hp > hero.hp_max * 0.6 and (_claim_tower(hero) or _hunt(hero)):
 			return
-		if hero.global_position.distance_to(tc.global_position) > 12.0:
-			_stand_at(hero, tc)
+		_walk_road(hero)
 		return
 	# follow the squadron furthest from home
 	var lead = my_squads[0]
@@ -287,6 +294,23 @@ func _push(hero, tc):
 	var dest = lead.center()
 	if hero.global_position.distance_to(dest) > 4.0:
 		_cmd({"type": "hero_move", "pos": dest})
+
+
+func _walk_road(hero):
+	"""Each bot hero owns a road (top / middle / bottom by slot) and pushes along it: its own
+	tower, then the enemy-side tower, then the enemy city."""
+	var nodes = MapGen.road_nodes()
+	var road = player.slot_index % 3
+	var mine = ["TT0", "M0", "BT0"] if player.team == 1 else ["TT1", "M1", "BT1"]
+	var theirs = ["TT1", "M1", "BT1"] if player.team == 1 else ["TT0", "M0", "BT0"]
+	var home = _match.base_position(player)
+	var enemy_home = MapGen.spawn_points()[1 if player.team == 1 else 0]
+	var my_progress = hero.global_position.distance_to(home)
+	for goal in [nodes[mine[road]], nodes[theirs[road]], enemy_home]:
+		if goal.distance_to(home) > my_progress + 3.0:
+			_cmd({"type": "hero_attack_move", "pos": goal})
+			return
+	_cmd({"type": "hero_attack_move", "pos": enemy_home})
 
 
 func _hunt(hero) -> bool:
@@ -336,7 +360,7 @@ func _shop(hero):
 			continue
 		# keep enough Gold for Age III and research once the Kingdom Age is reached
 		var reserve = 100 if player.age >= 2 else 0
-		if player.gold - reserve >= GameData.ITEMS[key].cost:
+		if player.treasury().supplies - reserve >= GameData.ITEMS[key].cost:
 			_cmd({"type": "buy", "item": key})
 		return
 

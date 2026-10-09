@@ -140,9 +140,10 @@ func buy_item(key: String) -> String:
 	var data = GameData.ITEMS[key]
 	if items.size() >= GameData.ITEM_SLOTS:
 		return "Your bags are full (%d items). Sell something first" % GameData.ITEM_SLOTS
-	if player.gold < data.cost:
-		return "Not enough Gold (need %d more)" % (data.cost - player.gold)
+	if not player.has_resources({"gold": data.cost}):
+		return player.missing_text({"gold": data.cost})
 	player.subtract_resources({"gold": data.cost})
+	player.log_spend(data.name, data.cost)
 	items.append({"key": key, "ready_at": 0.0})
 	recompute_stats()
 	return ""

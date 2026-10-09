@@ -36,6 +36,7 @@ RMB and QWER stay, because every MOBA uses them. What changes is that the RTS la
 | Wheel / **Z C** | Zoom / rotate |
 | Minimap left-click / right-click | Move the camera / move the hero |
 | **Esc** | Cancel targeting or placement; otherwise the menu |
+| **F8** | Game speed 1x / 2x / 5x (testing aid; host only) |
 
 ## Feedback each control needs
 

@@ -40,6 +40,9 @@ var _age_tab = null
 var _upgrades_tab = null
 var _learn_buttons = {}
 var _focus_pick = null
+var _steward_button = null
+var _shelter_button = null
+var _feed_label = null
 var _base_tabs = null
 var _squad_lane = null
 var _drag_box = null
@@ -172,27 +175,24 @@ func _build_top_bar():
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	panel.add_child(row)
-	for res in GameData.RESOURCES:
-		var tex = Icons.art("resources", res)
-		if tex != null:
-			var icon = TextureRect.new()
-			icon.texture = tex
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.custom_minimum_size = Vector2(24, 24)
-			icon.tooltip_text = RES_ICONS[res]
-			row.add_child(icon)
-		_res_labels[res] = _label(row, "", 16)
+	# v3: one shared war chest for the whole team
+	var chest = TextureRect.new()
+	chest.texture = Icons.art("resources", "gold")
+	chest.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	chest.custom_minimum_size = Vector2(26, 26)
+	chest.tooltip_text = "Supplies: your team's shared war chest. Everything costs Supplies; every teammate can spend them."
+	row.add_child(chest)
+	_res_labels["supplies"] = _label(row, "", 18, ACCENT)
 	_top_label = _label(row, "", 16)
-	_focus_pick = OptionButton.new()
-	_focus_pick.focus_mode = Control.FOCUS_NONE
-	_focus_pick.tooltip_text = "Villagers work on their own; this is what they focus on"
-	var i = 0
-	for key in ["balanced", "food", "wood", "stone", "iron"]:
-		_focus_pick.add_item("Villagers: " + ASSIGN_LABELS[key], i)
-		_focus_pick.set_item_metadata(i, key)
-		i += 1
-	_focus_pick.item_selected.connect(func(idx): _submit({"type": "assign_villagers", "assignment": _focus_pick.get_item_metadata(idx)}))
-	row.add_child(_focus_pick)
+	_steward_button = _button(row, "", func(): _submit({"type": "assign_villagers", "assignment": "steward"}))
+	_steward_button.tooltip_text = "Steward ON: the city builds houses, core buildings and the next Age by itself (keeping 250 Supplies for your heroes). Turn off to build yourself."
+	_shelter_button = _button(row, "", func(): _submit({"type": "assign_villagers", "assignment": "home"}))
+	_shelter_button.tooltip_text = "Send every villager into the houses (raid!) or back to work"
+	# purchase feed under the bar: who spent the team's Supplies on what
+	_feed_label = _label(_root, "", 12, Color(1, 1, 1, 0.75))
+	_feed_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_feed_label.position.y = 44
+	_feed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
 func _refresh_top_bar():
@@ -202,25 +202,24 @@ func _refresh_top_bar():
 	if p == null:
 		_top_label.text = "Spectating    " + clock
 		return
+	var t = p.treasury()
+	var income = 0
+	for res in t.income_per_min:
+		income += GameData.price({res: t.income_per_min[res]})
+	_res_labels["supplies"].text = "%d Supplies" % t.supplies + ("  (+%d/min)" % income if income > 0 else "")
 	var parts = []
-	for res in GameData.RESOURCES:
-		var income = p.income_per_min.get(res, 0)
-		var text = "%d" % p.get(res)
-		if Icons.art("resources", res) == null:
-			text = "%s %s" % [RES_ICONS[res], text]
-		if income > 0:
-			text += " (+%d/min)" % income
-		_res_labels[res].text = text
-	if _focus_pick != null:
-		_focus_pick.visible = true
-		for idx in range(_focus_pick.item_count):
-			if _focus_pick.get_item_metadata(idx) == p.focus and _focus_pick.selected != idx:
-				_focus_pick.select(idx)
 	var houses = p.buildings("village_house").size()
 	parts.append("Houses %d/%d" % [houses, GameData.MAX_HOUSES])
 	parts.append("Age: %s" % GameData.AGE_NAMES[p.age])
 	parts.append(clock)
 	_top_label.text = "    ".join(parts)
+	_steward_button.text = "Steward: %s" % ("ON" if t.steward else "off")
+	_shelter_button.text = "Villagers: %s" % ("SHELTERED" if p.shelter else "working")
+	var feed = []
+	for e in t.spend_log:
+		if GameData.now() - e.at < 25.0:
+			feed.append("%s bought %s (-%d)" % [e.who, e.what, e.amount])
+	_feed_label.text = "\n".join(feed.slice(0, 3))
 
 
 # --- hero panel -------------------------------------------------------------------------------
@@ -725,8 +724,8 @@ var _age_signature = ""
 func _refresh_age_tab():
 	var p = _match.local_player
 	var tcs_now = p.town_centers()
-	var sig = "%d|%s|%s" % [
-		p.age, p.has_resources(GameData.AGES.get(p.age + 1, {"cost": {}}).cost),
+	var sig = "%d|%d|%s|%s" % [
+		p.age, p.treasury().feats + _match._team_towers(p), p.has_resources(GameData.AGES.get(p.age + 1, {"cost": {}}).cost),
 		"" if tcs_now.is_empty() else "%d:%d:%s" % [
 			tcs_now[0].age_target, int(tcs_now[0].age_progress * 100), tcs_now[0].build_paused_reason
 		]
@@ -748,8 +747,9 @@ func _refresh_age_tab():
 		_label(_age_tab, "You have reached the final Age.", 13)
 		return
 	var age = GameData.AGES[next]
-	_label(_age_tab, "Next: %s Age\nCost: %s\nTime: %ds (your hero is free to leave)" % [
-		age.name, GameData.cost_text(age.cost), int(age.time)
+	var have = p.treasury().feats + _match._team_towers(p)
+	_label(_age_tab, "Next: %s Age\nCost: %s\nTime: %ds\nFeats: %d / %d (clear monster lairs, hold forgotten towers)" % [
+		age.name, GameData.cost_text(age.cost), int(age.time), have, age.get("feats", 0)
 	], 13)
 	var unlocks = []
 	for key in GameData.BUILD_MENU:
@@ -771,17 +771,17 @@ func _refresh_shop_tab():
 	if h == null:
 		return
 	var p = _match.local_player
-	var sig = "%d|%s|%d" % [p.gold, str(h.items.map(func(it): return it.key)), int(h.dead)]
+	var sig = "%d|%s|%d" % [p.treasury().supplies, str(h.items.map(func(it): return it.key)), int(h.dead)]
 	if sig == _shop_signature:
 		return
 	_shop_signature = sig
 	for child in _shop_tab.get_children():
 		child.queue_free()
-	_label(_shop_tab, "Gold: %d    Bags: %d/%d" % [p.gold, h.items.size(), GameData.ITEM_SLOTS], 14, ACCENT)
+	_label(_shop_tab, "Team Supplies: %d    Bags: %d/%d" % [p.treasury().supplies, h.items.size(), GameData.ITEM_SLOTS], 14, ACCENT)
 	for i in range(h.items.size()):
 		var data = GameData.ITEMS[h.items[i].key]
 		var slot = i
-		var sell = _button(_shop_tab, "Sell %s (+%d gold)" % [data.name, int(data.cost * GameData.SELL_REFUND)], func(): _submit({"type": "sell", "slot": slot}))
+		var sell = _button(_shop_tab, "Sell %s (+%d Supplies)" % [data.name, int(data.cost * GameData.SELL_REFUND)], func(): _submit({"type": "sell", "slot": slot}))
 		sell.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_shop_tab.add_child(HSeparator.new())
 	for key in GameData.SHOP_ORDER:
@@ -791,7 +791,7 @@ func _refresh_shop_tab():
 		b.icon = Icons.item(key)
 		b.add_theme_constant_override("icon_max_width", 26)
 		b.tooltip_text = data.desc
-		b.disabled = h.dead or p.gold < data.cost or h.items.size() >= GameData.ITEM_SLOTS
+		b.disabled = h.dead or p.treasury().supplies < data.cost or h.items.size() >= GameData.ITEM_SLOTS
 		_label(_shop_tab, data.desc, 11, Color(1, 1, 1, 0.65)).autowrap_mode = TextServer.AUTOWRAP_WORD
 
 
@@ -845,10 +845,10 @@ func _build_bubbles():
 	var box = VBoxContainer.new()
 	_bubbles.add_child(box)
 	_bubbles.set_meta("title", _label(box, "Villagers", 14, ACCENT))
-	_label(box, "Villagers work on their own. Pick what they should focus on:", 12, Color(1, 1, 1, 0.7))
+	_label(box, "Villagers work on their own: they pick the safest, richest site. Mines inside monster lairs open up once a hero clears the lair.", 12, Color(1, 1, 1, 0.7))
 	var row = HBoxContainer.new()
 	box.add_child(row)
-	for assignment in ["balanced", "food", "wood", "stone", "iron", "home"]:
+	for assignment in ["home"]:
 		var b = _button(row, ASSIGN_LABELS[assignment], _on_assign.bind(assignment))
 		b.set_meta("assignment", assignment)
 	_bubbles.set_meta("row", row)
@@ -882,7 +882,7 @@ func _refresh_bubbles():
 	var p = _match.local_player
 	for b in _bubbles.get_meta("row").get_children():
 		var key = b.get_meta("assignment")
-		var active = (key == "home" and p.shelter) or (key == p.focus and not p.shelter)
+		var active = key == "home" and p.shelter
 		b.modulate = ACCENT if active else Color.WHITE
 
 
@@ -1018,6 +1018,12 @@ func play_fx(kind: String, from: Vector3, to: Vector3):
 			Sfx.play("arcane", from)
 		"dmg":
 			_damage_number(from, int(to.x), int(to.y), int(to.z))
+		"loot":
+			var me = _match.local_player
+			if me != null and _match.player_for_slot(int(to.y)) != null and Teams.is_ally(_match.player_for_slot(int(to.y)), me):
+				_float_text(from, "+%d" % int(to.x), Color(1.0, 0.84, 0.25), 40 if int(to.y) == me.slot_index else 30)
+				if int(to.y) == me.slot_index:
+					Sfx.play("coin", from)
 		# sound-only events
 		"death":
 			Sfx.play("death", from, 0.0, 0.2)
@@ -1057,6 +1063,23 @@ func _arrow(from: Vector3, to: Vector3):
 	var tween = mesh.create_tween()
 	tween.tween_property(mesh, "global_position", end, clamp(start.distance_to(end) / 25.0, 0.08, 0.5))
 	tween.tween_callback(mesh.queue_free)
+
+
+func _float_text(at: Vector3, text: String, color: Color, size: int):
+	var label = Label3D.new()
+	label.text = text
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = size
+	label.outline_size = 8
+	label.pixel_size = 0.01
+	label.modulate = color
+	_match.add_child(label)
+	label.global_position = at + Vector3(0, 2.8, 0)
+	var tween = label.create_tween().set_parallel(true)
+	tween.tween_property(label, "global_position:y", label.global_position.y + 1.6, 1.2)
+	tween.tween_property(label, "modulate:a", 0.0, 1.0).set_delay(0.4)
+	tween.chain().tween_callback(label.queue_free)
 
 
 func _damage_number(at: Vector3, amount: int, from_slot: int, to_slot: int):

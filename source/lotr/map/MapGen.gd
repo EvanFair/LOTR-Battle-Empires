@@ -1,22 +1,23 @@
 class_name MapGen
-## Builds the 4-base "Middle-earth" battlefield. Deterministic from the seed so the host and
-## every client generate the same map (resource nodes get the same net ids in the same order).
+## Builds the 2-team "Middle-earth" battlefield (v3). Deterministic from the seed so the host
+## and every client generate the same map (resource nodes get the same net ids in the same order).
 ##
-## Town Centers sit a third of the way in from the corners, open on every side. Winding roads
-## join them (3 roads into every town) through 8 forgotten towers that heroes can claim:
+## LoL-style diagonal: team 1's city bottom-left, team 2's top-right. Three winding roads join
+## them; each road has two forgotten towers (one nearer each city). Two jungles (one per side)
+## hide monster lairs that guard the richest mines; two Cave Troll pits flank the middle.
 ##
-##        B0 ---- T_N ---- B1          B = base (Town Center), T = forgotten tower,
-##        |  \           /  |          C = the Cave Troll's lair in the middle.
-##       T_W   D0     D1   T_E          Roads: B-T_N-B, B-T_W-B, B-D-C (diagonals)...
-##        |      \ C /      |
-##        |      /   \      |
-##       ...   D2     D3   ...
-##        B2 ---- T_S ---- B3
+##        TL ---TT1---------- B1          B = city (Town Center), T = forgotten tower,
+##        |               /   |          M = middle-road tower, P = troll pit.
+##       TT0     P0     M1    BT1
+##        |          C        |
+##       ...  M0       P1    ...
+##        B0 ---BT0---------- BR
 
 const MapScene = preload("res://source/match/Map.tscn")
 
-const SIZE = 160.0
-const INSET = 44.0  # Town Centers this far in from each edge
+const SIZE = 150.0
+const INSET = 26.0  # Town Centers this far in from their corner
+const EDGE = 14.0  # the top and bottom roads bend through corners this far from the edge
 const LANE_STEP = 8.0
 const LANE_CLEARANCE = 5.0
 const HILL_TINT = Color(0.62, 0.7, 0.5)  # calms the pack's bright yellow grass to a meadow green
@@ -24,45 +25,55 @@ const GRASS = Color("5c7d3a")
 
 # road graph edges: node ids (see road_nodes); "name" is what the HUD shows
 const ROAD_DEFS = [
-	["B0", "T_N"], ["T_N", "B1"], ["B2", "T_S"], ["T_S", "B3"],
-	["B0", "T_W"], ["T_W", "B2"], ["B1", "T_E"], ["T_E", "B3"],
-	["B0", "D0"], ["D0", "C"], ["B1", "D1"], ["D1", "C"],
-	["B2", "D2"], ["D2", "C"], ["B3", "D3"], ["D3", "C"],
+	["B0", "TT0"], ["TT0", "TL"], ["TL", "TT1"], ["TT1", "B1"],
+	["B0", "M0"], ["M0", "C"], ["C", "M1"], ["M1", "B1"],
+	["B0", "BT0"], ["BT0", "BR"], ["BR", "BT1"], ["BT1", "B1"],
 ]
 const TOWER_NAMES = {
-	"T_N": "North road", "T_S": "South road", "T_W": "West road", "T_E": "East road",
-	"D0": "North-west crossing", "D1": "North-east crossing", "D2": "South-west crossing",
-	"D3": "South-east crossing",
+	"TT0": "Top road (south)", "TT1": "Top road (north)", "M0": "Middle road (south)",
+	"M1": "Middle road (north)", "BT0": "Bottom road (west)", "BT1": "Bottom road (east)",
 }
 
 
 static func spawn_points() -> Array:
-	return [
-		Vector3(INSET, 0, INSET),
-		Vector3(SIZE - INSET, 0, INSET),
-		Vector3(INSET, 0, SIZE - INSET),
-		Vector3(SIZE - INSET, 0, SIZE - INSET),
-	]
+	"""One city per team: index 0 = team 1 (bottom-left), 1 = team 2 (top-right)."""
+	return [Vector3(INSET, 0, SIZE - INSET), Vector3(SIZE - INSET, 0, INSET)]
 
 
 static func road_nodes() -> Dictionary:
 	var c = SIZE / 2.0
-	var center = Vector3(c, 0, c)
 	var b = spawn_points()
-	var edge = 22.0  # outer roads bow out towards the map edge
-	var nodes = {"C": center, "T_N": Vector3(c, 0, edge), "T_S": Vector3(c, 0, SIZE - edge),
-		"T_W": Vector3(edge, 0, c), "T_E": Vector3(SIZE - edge, 0, c)}
-	for i in range(4):
-		nodes["B%d" % i] = b[i]
-		nodes["D%d" % i] = b[i].lerp(center, 0.5)
+	var nodes = {
+		"B0": b[0], "B1": b[1], "C": Vector3(c, 0, c),
+		"TL": Vector3(EDGE, 0, EDGE), "BR": Vector3(SIZE - EDGE, 0, SIZE - EDGE),
+	}
+	nodes["TT0"] = Vector3(EDGE + 2.0, 0, c + 8.0)
+	nodes["TT1"] = Vector3(c - 8.0, 0, EDGE + 2.0)
+	nodes["BT0"] = Vector3(c + 8.0, 0, SIZE - EDGE - 2.0)
+	nodes["BT1"] = Vector3(SIZE - EDGE - 2.0, 0, c - 8.0)
+	nodes["M0"] = b[0].lerp(nodes.C, 0.55)
+	nodes["M1"] = b[1].lerp(nodes.C, 0.55)
 	return nodes
+
+
+static func pit_sites() -> Array:
+	"""The two Cave Troll pits, either side of the middle road."""
+	var c = SIZE / 2.0
+	return [Vector3(c - 24.0, 0, c - 24.0), Vector3(c + 24.0, 0, c + 24.0)]
+
+
+static func jungle_sites(side: int) -> Array:
+	"""Centres of a team's two jungle quarters (between its middle road and its side roads)."""
+	var n = road_nodes()
+	var b = n["B%d" % side]
+	return [(b + n.TL + n.C) / 3.0, (b + n.BR + n.C) / 3.0]
 
 
 static func tower_sites() -> Array:
 	"""Forgotten towers: [{id, name, pos}] in a fixed order (index = tower number)."""
 	var nodes = road_nodes()
 	var out = []
-	for id in ["T_N", "T_E", "T_S", "T_W", "D0", "D1", "D3", "D2"]:
+	for id in ["TT0", "TT1", "M0", "M1", "BT0", "BT1"]:
 		out.append({"id": id, "name": TOWER_NAMES[id], "pos": nodes[id]})
 	return out
 
@@ -211,25 +222,26 @@ static func nearest_node(point: Vector3) -> String:
 
 
 static func camp_sites() -> Array:
-	"""Jungle camps in the four wedges between the roads, the Cave Troll's lair in the middle,
-	and two deer herds in the open land behind every base."""
-	var c = SIZE / 2.0
-	var center = Vector3(c, 0, c)
+	"""Two jungle quarters per team with a spider nest and a warg den each (each guarding a
+	rich mine), the two Cave Troll pits, and deer herds in the open land behind each city."""
 	var lanes = build_lanes()
-	var sites = [{"camp": "troll", "pos": center}]
-	var wedges = [Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0)]
-	for i in range(wedges.size()):
-		var out = wedges[i]
-		var side = Vector3(-out.z, 0, out.x)
-		var a = "spiders" if i % 2 == 0 else "wargs"
-		var b = "wargs" if i % 2 == 0 else "spiders"
-		for spot in [[a, center + out * 30.0 + side * 13.0], [b, center + out * 30.0 - side * 13.0], [b, center + out * 16.0]]:
-			sites.append({"camp": spot[0], "pos": _push_off_lanes(spot[1], lanes)})
+	var sites = []
+	for pit in pit_sites():
+		sites.append({"camp": "troll", "pos": pit})
+	var c = Vector3(SIZE / 2.0, 0, SIZE / 2.0)
+	for side in range(2):
+		var quarters = jungle_sites(side)
+		for q in range(quarters.size()):
+			var centre = quarters[q]
+			var across = (centre - c).normalized()
+			var side_dir = Vector3(-across.z, 0, across.x)
+			sites.append({"camp": "spiders" if q == 0 else "wargs", "pos": _push_off_lanes(centre + side_dir * 7.0, lanes)})
+			sites.append({"camp": "wargs" if q == 0 else "spiders", "pos": _push_off_lanes(centre - side_dir * 7.0, lanes)})
 	for spawn in spawn_points():
-		var away = (spawn - center).normalized()
+		var away = (spawn - c).normalized()
 		var ang = atan2(away.z, away.x)
-		for off in [-0.6, 0.6]:
-			var p = spawn + Vector3(cos(ang + off), 0, sin(ang + off)) * 24.0
+		for off in [-1.1, 1.1]:
+			var p = spawn + Vector3(cos(ang + off), 0, sin(ang + off)) * 17.0
 			sites.append({"camp": "herd", "pos": _push_off_lanes(p, lanes)})
 	return sites
 
@@ -287,8 +299,8 @@ static func _place_resources(map, rng, spawns, lanes):
 	var counter = [0]
 	# each base gets the same layout, rotated to face the map centre
 	var layout = [
-		["wood", 13.0, 0.0, 6], ["wood", 15.0, 1.25, 5], ["food", 10.0, 0.55, 4],
-		["stone", 12.0, 0.95, 3], ["iron", 14.0, -0.3, 3],
+		["wood", 13.0, 0.0, 6], ["wood", 15.0, 1.25, 6], ["food", 10.0, 0.55, 5],
+		["stone", 12.0, 0.95, 2], ["iron", 14.0, -0.3, 2], ["wood", 16.0, -0.9, 5],
 	]
 	var center = Vector3(SIZE / 2.0, 0, SIZE / 2.0)
 	for spawn in spawns:
@@ -301,13 +313,15 @@ static func _place_resources(map, rng, spawns, lanes):
 			for n in range(entry[3]):
 				var p = cluster_center + Vector3(rng.randf_range(-2.5, 2.5), 0, rng.randf_range(-2.5, 2.5))
 				_add_resource(root, entry[0], p, placed, counter)
-	# contested mid-map resources between the lanes
-	for q in [Vector3(0.5, 0, 0.25), Vector3(0.75, 0, 0.5), Vector3(0.5, 0, 0.75), Vector3(0.25, 0, 0.5)]:
-		var c = Vector3(SIZE * q.x, 0, SIZE * q.z)
-		c = _push_off_lanes(c, lanes)
-		for type in ["iron", "stone", "wood", "wood"]:
-			var p = c + Vector3(rng.randf_range(-5, 5), 0, rng.randf_range(-5, 5))
-			_add_resource(root, type, p, placed, counter)
+	# rich mines inside every jungle lair: villagers only work them once a hero clears the lair
+	for site in camp_sites():
+		if site.camp == "herd":
+			continue
+		var types = ["iron", "stone", "iron"] if site.camp == "troll" else (["stone", "stone"] if site.camp == "spiders" else ["iron", "iron"])
+		for k in range(types.size()):
+			var ang = TAU * k / types.size() + 0.5
+			var p = site.pos + Vector3(cos(ang), 0, sin(ang)) * 4.2
+			_add_resource(root, types[k], p, placed, counter)
 
 
 static func _push_off_lanes(point: Vector3, lanes: Array) -> Vector3:

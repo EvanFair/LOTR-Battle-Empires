@@ -19,6 +19,9 @@ ART (Oct 2026 asset pass)
   game with Google Nano Banana from our own prompts (docs/ART_PROMPTS.txt)
   Stylized Nature MegaKit, Modular Village and Modular Temple by Quaternius (CC0) - https://quaternius.com
   Stylized Explosion FX by Binbun3D (CC0) - https://bun3d.com
+  Soldiers and villagers: Universal Animation Library 1 & 2 mannequin and animations by
+  Quaternius (CC0); weapons from the low-poly Elven, Dwarven and Samurai weapon packs
+  generated with polyy.ai (CC0)
 
 MUSIC AND SOUND EFFECTS
   "Reverence" and "Unknown Lands" from the Music Loop Bundle by Abstraction (CC0) - https://abstractionmusic.com

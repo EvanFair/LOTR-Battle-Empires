@@ -38,6 +38,7 @@ var _next_net_id = 1
 var _next_squad_id = 1
 var _registry = {}
 var _squads_root = null
+var _income_left = 2.0
 var _win_check_left = WIN_CHECK_INTERVAL
 
 
@@ -125,10 +126,12 @@ func _setup_atmosphere():
 	sun.directional_shadow_max_distance = 70.0
 	# each base sits on ground that suits its people
 	var spawns = MapGen.spawn_points()
+	var painted = {}
 	for slot in match_settings.slots.size():
 		var slot_data = match_settings.slots[slot]
-		if slot_data.kind == "open":
+		if slot_data.kind == "open" or painted.has(slot_data.team):
 			continue
+		painted[slot_data.team] = true
 		var disc = MeshInstance3D.new()
 		var mesh = CylinderMesh.new()
 		mesh.top_radius = GameData.BASE_RADIUS + 1.0
@@ -141,7 +144,7 @@ func _setup_atmosphere():
 		mat.roughness = 1.0
 		disc.material_override = mat
 		disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		disc.position = spawns[slot] + Vector3(0, 0.02, 0)
+		disc.position = spawns[clampi(slot_data.team - 1, 0, 1)] + Vector3(0, 0.02, 0)
 		map.find_child("Decorations").add_child(disc)
 
 
@@ -195,12 +198,35 @@ func _create_players():
 		p.peer_id = slot.peer if slot.kind == "human" else 0
 		p.is_bot = slot.kind == "bot"
 		p.color = Constants.Player.COLORS[i]
-		p.set_resources(GameData.STARTING_RESOURCES)
 		_players.add_child(p)
 		p.add_to_group("players")
 		players_by_slot[i] = p
 		if slot.kind == "human" and slot.peer == me:
 			local_player = p
+	# v3: each team shares one city and one war chest, held by its first player (the bank)
+	var banks = {}
+	var slot_keys = players_by_slot.keys()
+	slot_keys.sort()
+	for i in slot_keys:
+		var p = players_by_slot[i]
+		if not banks.has(p.team):
+			banks[p.team] = p
+			p.set_resources(GameData.STARTING_RESOURCES)
+		else:
+			p.bank = banks[p.team]
+
+
+func base_position(p) -> Vector3:
+	"""The team's city (team 1 = bottom-left, team 2 = top-right)."""
+	var spawns = MapGen.spawn_points()
+	return spawns[clampi(p.team - 1, 0, spawns.size() - 1)]
+
+
+func team_bank(team: int):
+	for p in players_by_slot.values():
+		if p.team == team and p.bank == null:
+			return p
+	return null
 
 
 func player_for_slot(slot):
@@ -228,12 +254,15 @@ func _owner_check(player_index, peer_id) -> bool:
 
 
 func _attach_bots():
+	# bots, plus every team bank (its brain doubles as the city's Steward)
 	for p in players_by_slot.values():
-		if p.is_bot:
+		if p.is_bot or p.bank == null:
 			_attach_bot(p)
 
 
 func _attach_bot(p):
+	if has_node("Bot%d" % p.slot_index):
+		return
 	var bot = BotScript.new()
 	bot.name = "Bot%d" % p.slot_index
 	bot.player = p
@@ -258,12 +287,23 @@ func _on_host_left():
 
 # --- spawning (host) --------------------------------------------------------------------------
 func _spawn_bases():
-	var spawns = MapGen.spawn_points()
 	var center = Vector3(MapGen.SIZE / 2.0, 0, MapGen.SIZE / 2.0)
-	for slot in players_by_slot:
+	var hero_index = {}
+	var slot_keys = players_by_slot.keys()
+	slot_keys.sort()
+	for slot in slot_keys:
 		var p = players_by_slot[slot]
-		var origin = spawns[slot]
+		var origin = base_position(p)
 		var to_center = (center - origin).normalized()
+		if p.bank != null:
+			# teammates share the bank's city; they only bring their hero
+			var k = hero_index.get(p.team, 0) + 1
+			hero_index[p.team] = k
+			var side = Vector3(to_center.z, 0, -to_center.x) * (2.5 if k == 1 else -2.5)
+			var mate = spawn_unit({"kind": "hero", "hero": p.hero_key}, origin + to_center * 4.5 + side, p)
+			mate.home_position = mate.global_position
+			p.hero = mate
+			continue
 		spawn_building(p, "town_center", origin, false)
 		var house_pos = origin - to_center * 6.0 + Vector3(to_center.z, 0, -to_center.x) * 3.0
 		spawn_building(p, "village_house", house_pos, false)
@@ -286,6 +326,26 @@ func _spawn_camps():
 		var camp = {"key": site.camp, "pos": site.pos, "members": [], "respawn_at": -1.0}
 		camps.append(camp)
 		_populate_camp(camp)
+
+
+func _team_towers(p) -> int:
+	var n = 0
+	for i in range(tower_state.size()):
+		var holder = tower_holder(i)
+		if holder != null and holder.player != null and holder.player.has_method("treasury") and holder.player.treasury() == p.treasury():
+			n += 1
+	return n
+
+
+func site_guarded(pos: Vector3) -> bool:
+	"""True while a living lair (not a deer herd) sits within reach of this spot."""
+	for camp in camps:
+		if camp.key == "herd" or camp.pos.distance_to(pos) > 9.0:
+			continue
+		for m in camp.members:
+			if is_instance_valid(m) and m.is_alive():
+				return true
+	return false
 
 
 func _populate_camp(camp):
@@ -318,9 +378,16 @@ func on_creature_slain(creature, killer_player):
 	"""Called by Combat when a creature dies to a player's unit (host)."""
 	var data = GameData.CREATURES[creature.creature_key]
 	if data.has("team_gold"):
-		for p in players_by_slot.values():
-			if Teams.is_ally(p, killer_player):
-				p.add_resources({"gold": data.team_gold})
+		killer_player.add_resources({"gold": data.team_gold})  # the war chest is shared anyway
+	# the last creature of a lair: the mine it guarded opens, and it counts as a feat for the Age
+	var camp = creature.get("camp")
+	if camp != null and camp.key != "herd" and killer_player.has_method("treasury"):
+		var left = camp.members.filter(func(m): return is_instance_valid(m) and m.is_alive() and m != creature)
+		if left.is_empty():
+			killer_player.treasury().feats += 1
+			for p in players_by_slot.values():
+				if Teams.is_ally(p, killer_player):
+					toast_player(p.slot_index, "%s cleared the %s lair: its mine is open to your villagers" % [killer_player.player_name, GameData.CAMPS[camp.key].get("name", camp.key)])
 	if data.has("buff"):
 		var buff = data.buff
 		for u in get_tree().get_nodes_in_group("units"):
@@ -407,7 +474,7 @@ func by_net_id(net_id):
 	return node if node != null and is_instance_valid(node) else null
 
 
-func spawn_squadron(p, unit_class: String, building, lane_index: int):
+func spawn_squadron(p, unit_class: String, building, lane_index: int, follow_hero = false):
 	var stats = GameData.troop_stats(p.faction, unit_class, p.upgrades)
 	var front = building.global_position
 	var center = Vector3(MapGen.SIZE / 2.0, 0, MapGen.SIZE / 2.0)
@@ -423,6 +490,9 @@ func spawn_squadron(p, unit_class: String, building, lane_index: int):
 			)
 		)
 	var squad = make_squadron(p, unit_class, units, building.global_position)
+	if follow_hero and p.hero != null and is_instance_valid(p.hero):
+		squad.order_follow()  # March of Giants: your soldiers rally to you
+		return squad
 	var path = route_points(lane_index, building.global_position)
 	if not path.is_empty():
 		squad.march(path)
@@ -436,7 +506,7 @@ func _build_targets() -> Array:
 	var out = []
 	var spawns = MapGen.spawn_points()
 	for i in range(spawns.size()):
-		out.append({"kind": "base", "slot": i, "node": "B%d" % i, "pos": spawns[i]})
+		out.append({"kind": "base", "team": i + 1, "node": "B%d" % i, "pos": spawns[i]})
 	var sites = MapGen.tower_sites()
 	for i in range(sites.size()):
 		out.append({"kind": "tower", "tower": i, "node": sites[i].id, "pos": sites[i].pos, "name": sites[i].name})
@@ -483,8 +553,7 @@ func lanes_for_player(p) -> Array:
 	var out = []
 	for t in targets:
 		if t.kind == "base":
-			var owner = player_for_slot(t.slot)
-			if owner == null or owner == p or Teams.is_ally(owner, p):
+			if t.team == p.team:
 				continue
 		out.append(t)
 	return out
@@ -494,8 +563,8 @@ func lane_label(target_index: int, p) -> String:
 	var t = targets[target_index]
 	match t.kind:
 		"base":
-			var owner = player_for_slot(t.slot)
-			return "Attack %s (%s)" % [owner.player_name, GameData.FACTIONS[owner.faction].name] if owner != null else "Empty base"
+			var owner = team_bank(t.team)
+			return "Attack the %s city" % GameData.FACTIONS[owner.faction].name if owner != null else "Empty city"
 		"tower":
 			var held_by = tower_holder(t.tower)
 			var who = (" (held by %s)" % held_by.player.player_name) if held_by != null else ""
@@ -750,6 +819,9 @@ func _cmd_assign_villagers(cmd):
 	if p == null:
 		return ""
 	var a = cmd.get("assignment", "balanced")
+	if a == "steward":
+		p.treasury().steward = not p.treasury().steward
+		return ""
 	if a == "home":
 		p.shelter = not p.shelter
 		return ""
@@ -776,10 +848,9 @@ func _old_assign_villagers(cmd):
 
 
 func _cmd_build(cmd):
-	var hero = _alive_hero(cmd)
-	if hero == null:
-		return "Your hero is dead"
-	var p = hero.player
+	var p = player_for_slot(cmd.player)
+	if p == null:
+		return "No player"
 	var key = cmd.building
 	if not GameData.BUILDINGS.has(key) or not GameData.BUILDINGS[key].get("buildable", true):
 		return "Can't build that"
@@ -801,6 +872,7 @@ func _cmd_build(cmd):
 	if not p.has_resources(data.cost):
 		return p.missing_text(data.cost)
 	p.subtract_resources(data.cost)
+	p.log_spend(data.name, GameData.price(data.cost))
 	spawn_building(p, key, pos, true)
 	return ""
 
@@ -892,12 +964,13 @@ func _cmd_cancel_build(cmd):
 
 
 func _base_panel_check(cmd):
-	var hero = _alive_hero(cmd)
-	if hero == null:
-		return "Your hero is dead"
-	if not hero.player.in_base(hero.global_position):
-		return "Return to your base first"
-	return ""
+	# v3: the city is run from anywhere (the hero should be out on the map)
+	return "" if player_for_slot(cmd.player) != null else "No player"
+
+
+func _same_team_building(b, cmd) -> bool:
+	var p = player_for_slot(cmd.player)
+	return b != null and p != null and b.player != null and b.player.has_method("treasury") and b.player.treasury() == p.treasury()
 
 
 func _cmd_set_auto_repeat(cmd):
@@ -905,7 +978,7 @@ func _cmd_set_auto_repeat(cmd):
 	if err != "":
 		return err
 	var b = by_net_id(cmd.building)
-	if b == null or b.player != player_for_slot(cmd.player) or b.trains == "":
+	if not _same_team_building(b, cmd) or b.trains == "":
 		return ""
 	b.set_auto_repeat(cmd.enabled, int(cmd.get("lane", -1)))
 	return ""
@@ -916,9 +989,12 @@ func _cmd_train(cmd):
 	if err != "":
 		return err
 	var b = by_net_id(cmd.building)
-	if b == null or b.player != player_for_slot(cmd.player) or b.trains == "" or not b.is_constructed():
+	if not _same_team_building(b, cmd) or b.trains == "" or not b.is_constructed():
 		return ""
-	b.queue_manual()
+	if not b.player.has_resources(b.squad_cost()):
+		return b.player.missing_text(b.squad_cost())
+	b.queue_manual(player_for_slot(cmd.player))
+	player_for_slot(cmd.player).log_spend(GameData.FACTIONS[b.player.faction].units.get(b.trains, b.trains), GameData.price(b.squad_cost()))
 	return ""
 
 
@@ -935,10 +1011,15 @@ func _cmd_advance_age(cmd):
 		return "You need a Town Center"
 	if tc[0].age_target > 0:
 		return "Already advancing"
+	var feats_needed = GameData.AGES[target].get("feats", 0)
+	if p.treasury().feats + _team_towers(p) < feats_needed:
+		return "The %s Age needs %d feats: cleared lairs or held forgotten towers (you have %d)" % [
+			GameData.AGE_NAMES[target], feats_needed, p.treasury().feats + _team_towers(p)]
 	var cost = GameData.AGES[target].cost
 	if not p.has_resources(cost):
 		return p.missing_text(cost)
 	p.subtract_resources(cost)
+	p.log_spend("%s Age" % GameData.AGE_NAMES[target], GameData.price(cost))
 	tc[0].start_age_advance(target)
 	return ""
 
@@ -964,6 +1045,7 @@ func _cmd_research(cmd):
 	if not p.has_resources(data.cost):
 		return p.missing_text(data.cost)
 	p.subtract_resources(data.cost)
+	p.log_spend(data.name, GameData.price(data.cost))
 	smiths[0].start_research(key)
 	return ""
 
@@ -982,8 +1064,20 @@ func _physics_process(delta):
 	_win_check_left = WIN_CHECK_INTERVAL
 	_camps_tick()
 	for p in players_by_slot.values():
-		if not p.defeated:
+		if not p.defeated and p.bank == null:
 			p.rebalance_villagers()
+	_income_left -= WIN_CHECK_INTERVAL
+	if _income_left <= 0.0:
+		_income_left = 2.0
+		for p in players_by_slot.values():
+			if p.defeated or p.bank != null:
+				continue
+			var towers = 0
+			for i in range(tower_state.size()):
+				var holder = tower_holder(i)
+				if holder != null and holder.player != null and holder.player.has_method("treasury") and holder.player.treasury() == p:
+					towers += 1
+			p.supplies += GameData.PASSIVE_SUPPLIES + towers * GameData.TOWER_SUPPLIES
 	for p in players_by_slot.values():
 		if not p.defeated and p.town_centers().is_empty():
 			_defeat(p)
@@ -1054,5 +1148,5 @@ func _move_camera_to_start():
 	_camera.set_size_safely(30.0)
 	var focus = Vector3(MapGen.SIZE / 2.0, 0, MapGen.SIZE / 2.0)
 	if local_player != null:
-		focus = MapGen.spawn_points()[local_player.slot_index]
+		focus = base_position(local_player)
 	_camera.set_position_safely(focus)

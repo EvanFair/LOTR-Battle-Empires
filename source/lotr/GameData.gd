@@ -6,7 +6,15 @@ const RESOURCES = ["food", "wood", "stone", "iron", "gold"]
 var _game_time = 0.0  # seconds of simulated (unpaused) game time
 const GATHERABLE = ["food", "wood", "stone", "iron"]
 
-const STARTING_RESOURCES = {"food": 400, "wood": 400, "stone": 200, "iron": 150, "gold": 0}
+const STARTING_RESOURCES = {"supplies": 700}
+# v3: one shared war chest. Costs below keep their old per-resource split (it reads well in
+# tooltips) and are converted to Supplies; villager loads convert the same way, so a load of
+# iron from a guarded mine is worth twice a load of wood.
+const SUPPLY_VALUE = {"food": 1.0, "wood": 1.0, "stone": 1.5, "iron": 2.0, "gold": 1.0, "supplies": 1.0}
+const VILLAGER_YIELD = 0.45  # share of a load that reaches the war chest
+const PASSIVE_SUPPLIES = 4  # per team, every 2 s
+const TOWER_SUPPLIES = 3  # per claimed forgotten tower, every 2 s
+const LAST_HIT_BONUS = 1.6  # a hero's killing blow pays this much more than a soldier's
 
 # --- distances (metres) and timings (seconds) -------------------------------------------------
 const COMMAND_RANGE = 15.0  # hero must be this close to order a squadron or villager group
@@ -581,9 +589,10 @@ const WALL_MAX_LENGTH = 48.0  # longest wall in one drag
 const GATE_ROAD_DISTANCE = 2.6  # a wall piece this close to a road becomes a gate
 
 const AGES = {
-	2: {"name": "Kingdom", "cost": {"food": 200, "wood": 150, "stone": 50}, "time": 30.0},
-	3: {"name": "Empire", "cost": {"food": 400, "stone": 150, "iron": 150, "gold": 50},
-		"time": 45.0},
+	# v3 pacing (20-30 min matches): Kingdom around minute 5-7, Empire around 12-15
+	2: {"name": "Kingdom", "cost": {"food": 600, "wood": 400, "stone": 150}, "time": 60.0, "feats": 1},
+	3: {"name": "Empire", "cost": {"food": 1200, "stone": 400, "iron": 400, "gold": 300},
+		"time": 60.0, "feats": 3},
 }
 const AGE_NAMES = {1: "Settlement", 2: "Kingdom", 3: "Empire"}
 
@@ -623,10 +632,10 @@ const CREATURES = {
 	},
 }
 const CAMPS = {
-	"spiders": {"creatures": ["spider", "spider", "spider"], "respawn": 60.0},
-	"wargs": {"creatures": ["warg", "warg"], "respawn": 60.0},
-	"herd": {"creatures": ["deer", "deer", "deer"], "respawn": 50.0},
-	"troll": {"creatures": ["cave_troll"], "respawn": 210.0},
+	"spiders": {"name": "Spider nest", "creatures": ["spider", "spider", "spider"], "respawn": 90.0},
+	"wargs": {"name": "Warg den", "creatures": ["warg", "warg"], "respawn": 90.0},
+	"herd": {"name": "Deer herd", "creatures": ["deer", "deer", "deer"], "respawn": 50.0},
+	"troll": {"name": "Cave Troll pit", "creatures": ["cave_troll"], "respawn": 210.0},
 }
 
 # --- the Town Center shop ---------------------------------------------------------------------------
@@ -675,6 +684,13 @@ const RESOURCE_NODES = {
 # --- game clock -------------------------------------------------------------------------------
 func _physics_process(delta):
 	_game_time += delta
+
+
+func price(cost: Dictionary) -> int:
+	var total = 0.0
+	for res in cost:
+		total += cost[res] * SUPPLY_VALUE.get(res, 1.0)
+	return int(round(total))
 
 
 func now() -> float:
@@ -784,8 +800,5 @@ func level_for_xp(xp: int) -> int:
 
 
 func cost_text(cost: Dictionary) -> String:
-	var parts = []
-	for res in RESOURCES:
-		if cost.get(res, 0) > 0:
-			parts.append("%d %s" % [cost[res], res.capitalize()])
-	return ", ".join(parts) if not parts.is_empty() else "free"
+	var total = price(cost)
+	return "%d Supplies" % total if total > 0 else "free"

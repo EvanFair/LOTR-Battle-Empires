@@ -1,7 +1,7 @@
 class_name Combat
 ## Damage, counters, kill rewards and target search. Host only.
 
-const GOLD_FOR_KILL = {"troop": 4, "villager": 2, "hero": 150, "building": 25}
+const GOLD_FOR_KILL = {"troop": 12, "villager": 6, "hero": 200, "building": 40}
 const XP_FOR_KILL = {"troop": 20, "villager": 8, "hero": 200, "building": 40}
 
 
@@ -60,7 +60,11 @@ static func _reward_kill(attacker, victim):
 		var match_node = victim.get_tree().get_first_node_in_group("lotr_match")
 		if match_node != null:
 			match_node.fx("kill", victim.global_position, victim.global_position)
+	# v3: every kill feeds the team war chest; a hero's own killing blow pays more (last hit)
 	var gold = GOLD_FOR_KILL.get(victim.unit_kind, 0)
+	if attacker.unit_kind == "hero":
+		gold = int(gold * GameData.LAST_HIT_BONUS)
+		_float_supplies(attacker, victim, gold)
 	if gold > 0 and killer_player.has_method("add_resources"):
 		killer_player.add_resources({"gold": gold})
 	var xp = XP_FOR_KILL.get(victim.unit_kind, 0)
@@ -76,10 +80,21 @@ static func _reward_kill(attacker, victim):
 			hero.add_xp(xp)
 
 
+static func _float_supplies(attacker, victim, amount):
+	# a gold "+N" pops over the kill for the hero who landed it
+	var match_node = victim.get_tree().get_first_node_in_group("lotr_match")
+	if match_node != null and amount > 0:
+		match_node.fx("loot", victim.global_position, Vector3(amount, attacker.player.slot_index, 0))
+
+
 static func _reward_creature(attacker, victim):
 	var data = GameData.CREATURES[victim.creature_key]
 	var killer_player = attacker.player
-	killer_player.add_resources({"gold": data.gold, "food": data.get("food", 0)})
+	var reward = {"gold": data.gold, "food": data.get("food", 0)}
+	if attacker.unit_kind == "hero":
+		reward.gold = int(data.gold * GameData.LAST_HIT_BONUS)
+		_float_supplies(attacker, victim, GameData.price(reward))
+	killer_player.add_resources(reward)
 	# MOBA jungle: the last hitter heals a little; nearby allied heroes share the XP
 	if attacker.unit_kind == "hero":
 		attacker.hp = min(attacker.hp_max, attacker.hp + int(attacker.hp_max * 0.1))

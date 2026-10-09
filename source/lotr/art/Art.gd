@@ -137,6 +137,70 @@ const LOOPING = [
 	"Sit_Chair_Idle", "Skeletons_Inactive_Floor_Pose",
 ]
 
+# --- v3 low-poly people ----------------------------------------------------------------------------
+# Every soldier, villager and hero is the Quaternius Universal Animation Library mannequin (CC0,
+# realistic proportions, 86 animations) wearing a per-unit "outfit" (outfit.gdshader colours each
+# body part) and carrying a CC0 polyy.ai weapon. Set LOWPOLY = false to fall back to KayKit.
+const LOWPOLY = true
+const MANNEQUIN = "res://assets/characters/UAL1_Standard.glb"
+const MANNEQUIN_EXTRA = "res://assets/characters/UAL2_Standard.glb"
+const MANNEQUIN_SCALE = 0.92  # the mannequin is ~1.8 m; our soldiers are ~1.65 m
+const OUTFIT_SHADER = preload("res://source/shaders/3d/outfit.gdshader")
+const WEAPON_DIR = "res://assets/weapons/"
+# KayKit animation names the game already uses -> the mannequin's animation
+const ANIM_ALIAS = {
+	"Idle": "Idle_Loop", "2H_Melee_Idle": "Sword_Idle", "Walking_A": "Walk_Loop",
+	"Running_A": "Jog_Fwd_Loop", "1H_Melee_Attack_Chop": "Sword_Regular_A",
+	"1H_Melee_Attack_Slice_Diagonal": "Sword_Regular_B", "1H_Melee_Attack_Stab": "Sword_Regular_C",
+	"1H_Melee_Attack_Slice_Horizontal": "Sword_Attack", "2H_Melee_Attack_Chop": "Melee_Hook",
+	"2H_Melee_Attack_Slice": "Sword_Attack", "2H_Ranged_Shoot": "Pistol_Shoot",
+	"1H_Ranged_Shoot": "Pistol_Shoot", "Spellcast_Shoot": "Spell_Simple_Shoot",
+	"Spellcast_Raise": "Spell_Simple_Enter", "Sit_Chair_Idle": "Sitting_Idle_Loop",
+	"Interact": "TreeChopping_Loop", "Death_A": "Death01", "Death_B": "Death01",
+	"Jump_Full_Short": "NinjaJump_Start", "Dodge_Forward": "Roll", "Hit_A": "Hit_Chest",
+}
+# outfit palettes: [legs, boots, torso, forearms, hands, head]
+const SKIN = Color("c49a78")
+const ORC_SKIN = Color("5d6b3c")
+const URUK_SKIN = Color("4a3f37")
+const PALETTES = {
+	"gondor": [Color("3a3e47"), Color("26221f"), Color("b9bfca"), Color("8e96a4"), Color("4d443c"), Color("cfd4dc")],
+	"gondor_archer": [Color("33363d"), Color("26221f"), Color("2c3850"), Color("2c3850"), Color("4d443c"), Color("cfd4dc")],
+	"gondor_ranger": [Color("3f4a32"), Color("2b241d"), Color("4c5e3a"), Color("4c5e3a"), Color("4d443c"), Color("3d4a30")],
+	"rohan": [Color("6b5236"), Color("3e2f22"), Color("51703c"), Color("a08756"), SKIN, Color("c9a64a")],
+	"rohan_archer": [Color("6b5236"), Color("3e2f22"), Color("6f8a46"), Color("a08756"), SKIN, Color("b88f52")],
+	"mordor": [Color("3b302a"), Color("241d18"), Color("5a4636"), ORC_SKIN, ORC_SKIN, ORC_SKIN],
+	"mordor_armoured": [Color("3b302a"), Color("241d18"), Color("2d2826"), Color("443a33"), ORC_SKIN, Color("2f2b29")],
+	"isengard": [Color("2b2724"), Color("1c1917"), Color("2c2a2c"), URUK_SKIN, URUK_SKIN, Color("2e2b2b")],
+	"isengard_light": [Color("2b2724"), Color("1c1917"), Color("4a3f37"), URUK_SKIN, URUK_SKIN, URUK_SKIN],
+	"troll": [Color("4e5546"), Color("3c4237"), Color("5e6656"), Color("5e6656"), Color("4e5546"), Color("6a7360")],
+	"villager_free": [Color("6b5a44"), Color("3b2f24"), Color("a88f68"), SKIN, SKIN, SKIN],
+	"villager_shadow": [Color("3b302a"), Color("241d18"), Color("5a4a3a"), ORC_SKIN, ORC_SKIN, ORC_SKIN],
+}
+# [palette, weapon, scale]
+const LOWPOLY_UNITS = {
+	"gondor": {"infantry": ["gondor", "guard_captain_s_broadsword", 1.0], "archer": ["gondor_archer", "siege_crossbow", 1.0],
+		"rider": ["gondor", "bough_spear", 0.95], "special": ["gondor_ranger", "siege_crossbow", 1.0]},
+	"rohan": {"infantry": ["rohan", "boar_spear", 1.0], "archer": ["rohan_archer", "siege_crossbow", 1.0],
+		"rider": ["rohan", "bough_spear", 0.95], "heavy": ["rohan", "silver_falcata", 0.97],
+		"special": ["rohan_archer", "hand_crossbow", 0.95]},
+	"mordor": {"infantry": ["mordor", "bearded_rune_axe", 0.92], "archer": ["mordor", "hand_crossbow", 0.9],
+		"rider": ["mordor", "bearded_rune_axe", 0.88], "special": ["troll", "kanabo", 2.0]},
+	"isengard": {"infantry": ["isengard", "ranger_s_machete", 1.05], "archer": ["isengard", "siege_crossbow", 1.02],
+		"rider": ["isengard_light", "anvil_mace", 0.9], "special": ["isengard_light", "crescent_dagger", 0.98]},
+}
+# how each weapon sits in the right hand (rotation in degrees, offset along the grip, size in m)
+const WEAPON_GRIP = {"default": [Vector3(0, 0, -90), 0.0, 0.85], "crossbow": [Vector3(90, 0, 0), 0.0, 0.6],
+	"staff": [Vector3(0, 0, -90), 0.0, 1.6], "spear": [Vector3(90, 0, 0), 0.0, 1.5], "dagger": [Vector3(0, 0, -90), 0.0, 0.45],
+	"big": [Vector3(0, 0, -90), 0.0, 1.1]}
+const WEAPON_KIND = {
+	"siege_crossbow": "crossbow", "hand_crossbow": "crossbow", "iron_shod_warstaff": "staff",
+	"heartwood_staff": "staff", "bough_spear": "spear", "boar_spear": "spear", "crescent_dagger": "dagger",
+	"hearth_greatsword": "big", "bearded_greataxe": "big", "kanabo": "big", "granite_maul": "big",
+	"miner_s_pick_hammer": "dagger",
+}
+
+static var _anim_lib = null
 static var _scenes = {}
 static var _tinted = {}
 static var _sizes = {}
@@ -220,6 +284,94 @@ static func _tint_mesh(mesh: MeshInstance3D, tint: Color, key: String):
 				m.albedo_color = m.albedo_color * tint
 			_tinted[cache_key] = m
 		mesh.set_surface_override_material(i, _tinted[cache_key])
+
+
+static func outfit(palette: Array, shade = 1.0) -> ShaderMaterial:
+	var mat = ShaderMaterial.new()
+	mat.shader = OUTFIT_SHADER
+	for i in range(6):
+		mat.set_shader_parameter(["legs", "boots", "torso", "arms", "hands", "head"][i], palette[i])
+	mat.set_shader_parameter("shade", shade)
+	return mat
+
+
+static func mannequin(palette, weapon: String, scale: float) -> Node3D:
+	"""A low-poly person: the UAL mannequin in an outfit, weapon in the right hand."""
+	if palette is String:
+		palette = PALETTES.get(palette, PALETTES.gondor)
+	var node = _scene(MANNEQUIN).instantiate()
+	node.name = "Model"
+	node.scale = Vector3.ONE * MANNEQUIN_SCALE * scale
+	node.rotation.y = PI  # the mannequin faces +Z; our units face -Z
+	var key = str(palette.hash())
+	if not _tinted.has(key):
+		_tinted[key] = [outfit(palette), outfit(palette, 0.55)]
+	for mesh in node.find_children("*", "MeshInstance3D", true, false):
+		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		for i in range(mesh.mesh.get_surface_count()):
+			mesh.set_surface_override_material(i, _tinted[key][mini(i, 1)])
+	var players = node.find_children("*", "AnimationPlayer", true, false)
+	if not players.is_empty():
+		var anim: AnimationPlayer = players[0]
+		var lib = _animation_library(anim)
+		for lib_name in anim.get_animation_library_list():
+			anim.remove_animation_library(lib_name)
+		anim.add_animation_library("", lib)
+		anim.play("Idle")
+		node.set_meta("anim", anim)
+	if weapon != "":
+		var skel = node.find_children("*", "Skeleton3D", true, false)
+		if not skel.is_empty():
+			var hand = BoneAttachment3D.new()
+			hand.bone_name = "hand_r"
+			skel[0].add_child(hand)
+			hand.add_child(weapon_model(weapon))
+	return node
+
+
+static func weapon_model(weapon: String) -> Node3D:
+	var grip = WEAPON_GRIP[WEAPON_KIND.get(weapon, "default")]
+	var w = _scene(WEAPON_DIR + weapon + ".glb").instantiate()
+	var size = _footprint(WEAPON_DIR + weapon + ".glb", w)
+	var longest = max(size.x, max(size.y, size.z))
+	w.scale = Vector3.ONE * (grip[2] / max(0.01, longest)) / MANNEQUIN_SCALE
+	w.rotation_degrees = grip[0]
+	w.position = Vector3.ZERO
+	for mesh in w.find_children("*", "MeshInstance3D", true, false):
+		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return w
+
+
+static func _animation_library(anim: AnimationPlayer) -> AnimationLibrary:
+	"""One shared library: UAL1 + UAL2 animations, plus the KayKit names the game uses."""
+	if _anim_lib != null:
+		return _anim_lib
+	var lib = AnimationLibrary.new()
+	for src in [anim, null]:
+		var player = src
+		var holder = null
+		if player == null:
+			holder = _scene(MANNEQUIN_EXTRA).instantiate()
+			var found = holder.find_children("*", "AnimationPlayer", true, false)
+			player = found[0] if not found.is_empty() else null
+		if player != null:
+			for anim_name in player.get_animation_list():
+				if not lib.has_animation(anim_name):
+					lib.add_animation(anim_name, player.get_animation(anim_name))
+		if holder != null:
+			holder.free()
+	for alias in ANIM_ALIAS:
+		# Godot's importer drops the "_Loop" suffix (and loops those animations)
+		var src = ANIM_ALIAS[alias]
+		if not lib.has_animation(src):
+			src = src.trim_suffix("_Loop")
+		if lib.has_animation(src) and not lib.has_animation(alias):
+			lib.add_animation(alias, lib.get_animation(src))
+	for anim_name in lib.get_animation_list():
+		if anim_name.ends_with("_Loop") or anim_name in LOOPING or anim_name in ["Sword_Idle"]:
+			lib.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR
+	_anim_lib = lib
+	return lib
 
 
 # --- buildings and props ---------------------------------------------------------------------------

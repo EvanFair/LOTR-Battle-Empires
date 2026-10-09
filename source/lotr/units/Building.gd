@@ -102,15 +102,14 @@ func hero_presence() -> Dictionary:
 
 
 func _construction_tick(delta):
+	# v3: villagers raise buildings by themselves; a friendly hero nearby speeds it up, an
+	# enemy hero nearby stops the work
 	var presence = hero_presence()
 	if presence.enemy > 0:
 		build_paused_reason = "enemy_hero"
 		return
-	if presence.friendly == 0:
-		build_paused_reason = "no_hero"
-		return
 	build_paused_reason = ""
-	var speed = GameData.MULTI_HERO_BUILD_SPEED if presence.friendly >= 2 else 1.0
+	var speed = GameData.MULTI_HERO_BUILD_SPEED if presence.friendly >= 1 else 1.0
 	var build_time = max(1.0, GameData.BUILDINGS[building_key].build_time)
 	var step = delta * speed / build_time
 	var hp_before = progress * hp_max
@@ -255,13 +254,8 @@ func supply_full() -> bool:
 
 
 func supply_fraction() -> float:
-	var cost = squad_cost()
-	var total = 0
-	var have = 0
-	for res in cost:
-		total += cost[res]
-		have += min(cost[res], player.get(res))
-	return 1.0 if total == 0 else float(have) / total
+	var total = GameData.price(squad_cost())
+	return 1.0 if total == 0 else clampf(float(player.treasury().supplies) / total, 0.0, 1.0)
 
 
 func reserve_incoming(resource: String, amount: int):
@@ -285,7 +279,7 @@ func _production_tick(delta):
 		if manual_left <= 0.0:
 			manual_pending -= 1
 			manual_left = GameData.MANUAL_TRAIN_TIME
-			_train_squad()
+			_train_squad(manual_owners.pop_front() if not manual_owners.is_empty() else null)
 		return
 	if auto_repeat:
 		cycle_left -= delta
@@ -294,10 +288,10 @@ func _production_tick(delta):
 			_train_squad()
 
 
-func _train_squad():
+func _train_squad(owner = null):
 	player.subtract_resources(squad_cost())
 	var match_node = get_tree().get_first_node_in_group("lotr_match")
-	match_node.spawn_squadron(player, trains, self, lane)
+	match_node.spawn_squadron(owner if owner != null else player, trains, self, -1 if owner != null else lane, owner != null)
 
 
 func set_auto_repeat(enabled: bool, lane_index: int):
@@ -307,7 +301,11 @@ func set_auto_repeat(enabled: bool, lane_index: int):
 		cycle_left = GameData.AUTO_REPEAT_INTERVAL
 
 
-func queue_manual():
+var manual_owners = []  # who ordered each manual squad (it marches with that hero)
+
+
+func queue_manual(owner = null):
+	manual_owners.append(owner)
 	manual_pending += 1
 	if manual_pending == 1:
 		manual_left = GameData.MANUAL_TRAIN_TIME

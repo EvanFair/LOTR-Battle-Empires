@@ -111,6 +111,24 @@ func set_camera_locked(value: bool):
 
 
 # --- input ------------------------------------------------------------------------------------
+const GAME_SPEEDS = [1.0, 2.0, 5.0]
+
+
+func _cycle_game_speed():
+	"""Testing aid: F8 cycles 1x / 2x / 5x. Host only (the host runs the simulation)."""
+	if not _match.is_host():
+		return
+	var i = (GAME_SPEEDS.find(Engine.time_scale) + 1) % GAME_SPEEDS.size()
+	Engine.time_scale = GAME_SPEEDS[i]
+	# more physics steps per frame so 5x still simulates every tick
+	Engine.max_physics_steps_per_frame = int(8 * GAME_SPEEDS[i])
+	_match.broadcast_toast("Game speed: %dx" % int(GAME_SPEEDS[i]))
+
+
+func _exit_tree():
+	Engine.time_scale = 1.0
+
+
 func _unhandled_input(event):
 	if _match.ended or local_player() == null:
 		return
@@ -172,6 +190,8 @@ func _handle_key(event: InputEventKey):
 			_squad_order("hold")
 		KEY_4:
 			_squad_order("return")
+		KEY_F8:
+			_cycle_game_speed()
 		KEY_Y:
 			camera_locked = not camera_locked
 		KEY_SPACE:

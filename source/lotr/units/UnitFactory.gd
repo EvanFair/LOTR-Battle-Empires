@@ -78,7 +78,7 @@ static func _create_troop(params):
 	var look = Art.unit_look(params.faction, unit_class)
 	if params.get("ghost", false):
 		# Army of the Dead: risen skeleton warriors, translucent green
-		var dead = _character(unit, geometry, "Skeleton_Warrior", [], Color(1, 1, 1), 1.0, "melee")
+		var dead = _character(unit, geometry, "Skeleton_Warrior", [], Color(1, 1, 1), 1.0, "melee", [], ["gondor", "willow_leaf_longsword", 1.0])
 		Art.ghost(dead)
 		var anim = dead.get_meta("anim")
 		if anim.has_animation("Skeletons_Awaken_Standing"):
@@ -96,10 +96,10 @@ static func _create_troop(params):
 	elif Art.is_mounted(params.faction, unit_class):
 		_mount(geometry, params.faction)
 		var anim_set = "rider_ranged" if stats.ranged else "rider"
-		var rider = _character(unit, geometry, look[0], look[1], look[2], look[3], anim_set)
+		var rider = _character(unit, geometry, look[0], look[1], look[2], look[3], anim_set, [], _lowpoly_unit(params.faction, unit_class))
 		rider.position = Vector3(0, 0.62, 0.05)
 	else:
-		_character(unit, geometry, look[0], look[1], look[2], look[3], look[4])
+		_character(unit, geometry, look[0], look[1], look[2], look[3], look[4], [], _lowpoly_unit(params.faction, unit_class))
 	var bar = 1.9
 	if unit_class == "heavy" or Art.siege_kind(params.faction, unit_class) != "":
 		bar = 3.4 if Art.siege_kind(params.faction, unit_class) != "grond" else 4.2
@@ -135,17 +135,22 @@ static func _create_creature(params):
 			anim.body = body
 			unit.add_child(anim)
 		"cave_troll":
-			var troll = _character(unit, geometry, "Barbarian", ["2H_Axe"], Color(1, 1, 1), 2.7, "melee2h", ["Barbarian_Cape"])
+			var troll = _character(unit, geometry, "Barbarian", ["2H_Axe"], Color(1, 1, 1), 2.7, "melee2h", ["Barbarian_Cape"], ["troll", "granite_maul", 2.5])
 			# grey-green stony hide
-			Art.recolor(troll, {"Barbarian_Head": Color(0.48, 0.55, 0.45), "Barbarian_ArmLeft": Color(0.46, 0.53, 0.43),
-				"Barbarian_ArmRight": Color(0.46, 0.53, 0.43), "Barbarian_Body": Color(0.36, 0.33, 0.28),
-				"Barbarian_LegLeft": Color(0.34, 0.31, 0.27), "Barbarian_LegRight": Color(0.34, 0.31, 0.27)})
+			if not Art.LOWPOLY:
+				Art.recolor(troll, {"Barbarian_Head": Color(0.48, 0.55, 0.45), "Barbarian_ArmLeft": Color(0.46, 0.53, 0.43),
+					"Barbarian_ArmRight": Color(0.46, 0.53, 0.43), "Barbarian_Body": Color(0.36, 0.33, 0.28),
+					"Barbarian_LegLeft": Color(0.34, 0.31, 0.27), "Barbarian_LegRight": Color(0.34, 0.31, 0.27)})
 	_finish_mobile(unit, stats, 2.0 if params.creature != "cave_troll" else 5.2)
 	return unit
 
 
-static func _character(unit, geometry, model, props, tint, scale, anim_set, hide = []):
-	var node = Art.character(model, props, tint, scale, hide)
+static func _character(unit, geometry, model, props, tint, scale, anim_set, hide = [], lowpoly = []):
+	var node = null
+	if Art.LOWPOLY and not lowpoly.is_empty():
+		node = Art.mannequin(lowpoly[0], lowpoly[1], lowpoly[2])
+	else:
+		node = Art.character(model, props, tint, scale, hide)
 	geometry.add_child(node)
 	if node.has_meta("anim"):
 		var driver = AnimDriverScript.new()
@@ -157,6 +162,11 @@ static func _character(unit, geometry, model, props, tint, scale, anim_set, hide
 	return node
 
 
+static func _lowpoly_unit(faction: String, unit_class: String) -> Array:
+	var table = Art.LOWPOLY_UNITS.get(faction, Art.LOWPOLY_UNITS.gondor)
+	return table.get(unit_class, table.get("infantry"))
+
+
 static func _create_villager(params):
 	var stats = GameData.VILLAGER_STATS.duplicate()
 	var unit = _new_unit(VillagerScript, params, stats)
@@ -166,7 +176,8 @@ static func _create_villager(params):
 	unit.display_name = "Villager"
 	var geometry = _geometry(unit)
 	var tint = Art.ORC if params.faction == "mordor" else (Art.URUK if params.faction == "isengard" else Color(0.95, 0.85, 0.7))
-	_character(unit, geometry, "Mage", [], tint, 0.85, "worker", ["Mage_Hat"])
+	var free = GameData.FACTIONS.get(params.faction, {}).get("side", "free") == "free"
+	_character(unit, geometry, "Mage", [], tint, 0.85, "worker", ["Mage_Hat"], ["villager_free" if free else "villager_shadow", "miner_s_pick_hammer", 0.95])
 	_finish_mobile(unit, stats, 1.5)
 	return unit
 
@@ -189,6 +200,7 @@ static func _create_hero(params):
 	if look[0] == "spider":
 		_spider(unit, geometry, look[2], look[3])
 	else:
+		# heroes keep their own models (custom hero art is being made separately)
 		var model = _character(unit, geometry, look[0], look[1], look[2], look[3], look[4], look[5])
 		if Art.RECOLOR.has(params.hero):
 			Art.recolor(model, Art.RECOLOR[params.hero])

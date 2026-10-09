@@ -192,6 +192,7 @@ func _send_slow():
 				"slot": p.slot_index, "res": p.resources(), "age": p.age, "defeated": p.defeated,
 				"store_cd": max(0.0, p.storehouse_ready_at - now), "income": p.income_per_min,
 				"bot": p.is_bot, "upgrades": p.upgrades, "focus": p.focus, "shelter": p.shelter,
+				"steward": p.steward, "feats": p.feats, "feed": p.spend_log.map(func(e): return [e.who, e.what, e.amount, now - e.at]),
 			}
 		)
 	var heroes = []
@@ -312,6 +313,9 @@ func _rpc_slow(players, heroes, buildings, squad_list, resources, towers = []):
 		p.upgrades = pd.upgrades
 		p.focus = pd.get("focus", "balanced")
 		p.shelter = pd.get("shelter", false)
+		p.steward = pd.get("steward", true)
+		p.feats = pd.get("feats", 0)
+		p.spend_log = pd.get("feed", []).map(func(e): return {"who": e[0], "what": e[1], "amount": e[2], "at": now - e[3]})
 	for hd in heroes:
 		var h = _match.by_net_id(hd.id)
 		if h == null:
