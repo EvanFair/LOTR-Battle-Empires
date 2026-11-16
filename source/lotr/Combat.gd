@@ -83,6 +83,8 @@ static func deal_damage(attacker, target, amount: float, type = PHYSICAL, source
 				dmg *= 1.0 + st.damage_vs_heroes
 			"building":
 				dmg *= 1.0 + st.damage_vs_buildings
+	if tags.has("aoe") and target.unit_kind == "troop":
+		dmg *= Formations.aoe_taken(target)  # Spread formation (horde rules: Formations.gd)
 	# 3. mitigation
 	if type != TRUE:
 		var tstats = target.stats
@@ -228,6 +230,7 @@ static func _reward_kill(attacker, victim):
 	var xp = XP_FOR_KILL.get(victim.unit_kind, 0)
 	if victim.unit_kind == "hero":
 		xp += 40 * victim.level
+	Formations.award_xp(attacker, victim, xp)  # hordes earn rank experience
 	# XP is shared by the killer's team heroes nearby (MOBA style)
 	for hero in victim.get_tree().get_nodes_in_group("heroes"):
 		if (

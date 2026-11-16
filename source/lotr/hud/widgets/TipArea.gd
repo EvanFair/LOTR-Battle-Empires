@@ -51,7 +51,7 @@ func _process(delta):
 
 func _rebuild():
 	_refresh_left = 0.25
-	if tip == null or _Tips.host == null or not is_instance_valid(Tooltips.host):
+	if tip == null or _Tips.host == null or not is_instance_valid(_Tips.host):
 		_clear()
 		return
 	var t = tip.call()

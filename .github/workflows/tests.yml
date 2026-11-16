@@ -42,6 +42,10 @@ jobs:
         shell: bash -o pipefail {0}
         run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/RulesTest.tscn 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
 
+      - name: Armies (formations, stances, ranks, reinforce, selection)
+        shell: bash -o pipefail {0}
+        run: ./godot --headless --fixed-fps 60 --path . res://tests/auto/ArmyTest.tscn 2>&1 | tee -a test.log | grep -E --line-buffered "PASS|FAIL|RESULT|SCRIPT ERROR|=====|team [0-9]|events:|rejected|\\[(host|client)\\]"
+
       - name: LAN host and client
         shell: bash -o pipefail {0}
         run: |

@@ -21,15 +21,20 @@ RMB and QWER stay, because every MOBA uses them. What changes is that the RTS la
 | **Q W E R** | Quick-cast at the cursor on press (default). Optional setting: hold to show the indicator, cast on release. A unit-target spell picks the unit under the cursor or the nearest enemy near it, and walks into range first. |
 | **Ctrl + Q/W/E/R** | Spend a skill point to level that ability |
 | **D / F** | Hero utilities (faction horn/rally, heal) |
-| **5 6 7 8** | Item slots |
+| **5 6 7 8** | Item slots (the hero's). Control groups 5-8 are recalled with **Shift+5..8** |
 | **B** | In base: base panel (Build / Military / Age / Blacksmith / Shop). Outside: **Recall** (6s, cancelled by moving, casting or taking damage) |
 | **P** | Shop (only at base) |
 | **V** | Build menu anywhere (buildings can go anywhere since the 8 Oct playtest) |
-| Left-drag / click a soldier | Select squadrons anywhere; one soldier in the box selects its whole squadron; Shift adds |
+| Left-drag / click a soldier | Select squadrons (hordes) anywhere; one soldier in the box selects its whole horde; Shift adds, Shift-click a selected horde removes it |
+| Left-click one of your buildings | Select it: the selection panel shows its HP, production queue, train / auto-repeat / march target, Blacksmith research |
+| **Ctrl + 1..9** | Set a control group from the current selection (hordes and/or a building) |
+| **1 2 3 4 9** | Recall that group; tap twice quickly to centre the camera on it. Groups 5-8: **Shift + 5..8** |
 | Right-click with squadrons selected | They attack / move there; the hero stays |
 | **G** | Follow me: selected (or all) squadrons follow the hero and attack what it attacks |
 | **Tab** / **Ctrl+A** | Cycle / select all squadrons (no 15m limit any more) |
-| **1 2 3 4** | Selected squadrons: Attack / Move / Hold / Return home |
+| **T / X / N / J** | Selected hordes: Attack (then click an enemy) / Move (then click a point) / Hold / Return home. Also buttons in the selection panel (the old keys 1-4 are control groups now) |
+| **K / L** | Selected hordes: cycle formation / stance (Line, Shield Wall, Wedge, Pike Wall, Spread, Fire Arrows, Charge; Aggressive, Defensive, Hold Ground) |
+| **U** | Reinforce: refill the selected hordes' lost soldiers for Supplies (only while standing in your city) |
 | **Alt + left-click** (map or minimap) | Ping |
 | **Y** / **Space** | Camera lock on/off / snap to hero |
 | Arrows, thin screen-edge band, middle-drag | Pan |
@@ -45,7 +50,7 @@ RMB and QWER stay, because every MOBA uses them. What changes is that the RTS la
 - **Cursor:** shape changes over enemies.
 - **A pressed:** the hero's attack-range circle.
 - **Skill held** (or in indicator mode): the cast-range circle, plus the skill's shape (line for a skillshot, circle at the cursor for ground AoE, highlight for a unit target).
-- **Selection:** a ring under every soldier of the selected squadrons, and a green drag box while selecting.
+- **Selection:** a ring under every soldier of the selected squadrons, and a green drag box while selecting. The selection panel above the hero panel shows the selection: one horde = portrait, rank stars, soldiers "5/6", HP, formation and stance buttons; several = a grid of mini portraits (click narrows, Shift-click removes); a building = its production. A small bubble (name, stars, HP) floats over each selected horde.
 - **Defend:** a gold flag where the squad will defend.
 - **Recall:** a channel ring with a progress arc.
 - **Ping:** an expanding ring in the world and a blip on the minimap.
