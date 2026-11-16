@@ -366,6 +366,7 @@ func _rpc_slow(players, heroes, buildings, squad_list, resources, towers = []):
 	squads.clear()
 	for s in squad_list:
 		squads[s.id] = s
+	Formations.sync_banners(_match, squad_list)  # M5: banner carriers on clients
 	for id in resources:
 		var r = _match.by_net_id(id)
 		if r != null:

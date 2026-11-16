@@ -10,7 +10,9 @@ extends Node
 ##   Right-click (squads selected) . selected squadrons attack the enemy / move there
 ##   G ............................ selected squadrons (or all) follow your hero
 ##   Tab / Ctrl+A ................. cycle through / select all your squadrons
-##   1 2 3 4 ...................... selected: Attack (click enemy) / Defend (click point) / Hold / Return
+##   T X N J ...................... selected squads: Attack (click enemy) / Move (click point) / Hold / Return
+##   K L U ........................ selected squads: cycle formation / stance, Reinforce
+##   Ctrl+1..9 / 1-4 and 9 ........ set / recall a control group (Shift+5..8 recall 5-8; double-tap centres)
 ##   B ............................ in base: base panel; outside: Recall (6s channel)
 ##   Alt + left-click ............. ping for your team (Alt+Shift: danger)
 ##   Left-click house/villager .... resource bubbles
@@ -18,6 +20,7 @@ extends Node
 
 signal selected_squad_changed(squad_id)
 signal mode_changed(mode)
+signal selection_changed
 
 const UNIT_LAYER = 2
 
@@ -27,6 +30,9 @@ var selected_squads = []  # squad ids
 var selected_squad:  # first selected (0 = none); kept for the HUD
 	get:
 		return selected_squads[0] if not selected_squads.is_empty() else 0
+var selected_building = null  # a clicked building (the selection panel shows it)
+var groups = {}  # control group number -> {"squads": [ids], "building": net_id}
+var _group_tap = {}  # number -> msec of the last recall (double-tap centres the camera)
 var _drag_start = null  # screen position where a left-drag began
 var _highlighted = []
 var mode = ""  # "", "squad_attack", "squad_defend", "place", "attack_move"
@@ -84,7 +90,9 @@ func _process(delta):
 	var alive_ids = my_squads().map(func(s): return s.id)
 	var still = selected_squads.filter(func(id): return id in alive_ids)
 	if still.size() != selected_squads.size():
-		set_selection(still)
+		set_selection(still, selected_building)
+	if selected_building != null and (not is_instance_valid(selected_building) or not selected_building.is_alive()):
+		set_selection(selected_squads)
 	_refresh_highlights()
 	_match.hud.draw_drag_box(_drag_start, get_viewport().get_mouse_position() if _drag_start != null else null)
 	_update_indicators(h)
@@ -175,8 +183,18 @@ func _handle_key(event: InputEventKey):
 				learn_ability(OS.get_keycode_string(key))
 			else:
 				_start_aim(OS.get_keycode_string(key))
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_9:
+			if event.ctrl_pressed:
+				set_control_group(key - KEY_0)
+			else:
+				recall_control_group(key - KEY_0)
 		KEY_5, KEY_6, KEY_7, KEY_8:
-			use_item(key - KEY_5)
+			if event.ctrl_pressed:
+				set_control_group(key - KEY_0)
+			elif event.shift_pressed:
+				recall_control_group(key - KEY_0)  # plain 5-8 are the hero's items
+			else:
+				use_item(key - KEY_5)
 		KEY_A:
 			if event.ctrl_pressed:
 				set_selection(my_squads().map(func(s): return s.id))
@@ -189,14 +207,20 @@ func _handle_key(event: InputEventKey):
 			_cycle_squad()
 		KEY_G:
 			_follow_me()
-		KEY_1:
+		KEY_T:
 			_start_mode("squad_attack")
-		KEY_2:
+		KEY_X:
 			_start_mode("squad_defend")
-		KEY_3:
+		KEY_N:
 			_squad_order("hold")
-		KEY_4:
+		KEY_J:
 			_squad_order("return")
+		KEY_K:
+			_cycle_formation()
+		KEY_L:
+			_cycle_stance()
+		KEY_U:
+			_squad_cmd("squad_reinforce", {"mode": "now"})
 		KEY_F8:
 			_cycle_game_speed()
 		KEY_Y:
@@ -217,7 +241,7 @@ func _handle_key(event: InputEventKey):
 				aiming = ""
 				if mode == "cast":
 					cancel_mode()
-			elif mode == "" and not selected_squads.is_empty():
+			elif mode == "" and (not selected_squads.is_empty() or selected_building != null):
 				set_selection([])
 			elif mode == "":
 				return  # let the match menu have it
@@ -330,11 +354,14 @@ func _handle_left_click():
 				var sid = squad_of(unit)
 				if sid != 0:
 					var sel = selected_squads.duplicate() if Input.is_key_pressed(KEY_SHIFT) else []
-					if not sid in sel:
+					if sid in sel and Input.is_key_pressed(KEY_SHIFT):
+						sel.erase(sid)  # Shift-click toggles
+					elif not sid in sel:
 						sel.append(sid)
 					set_selection(sel)
 				return
-			if unit == null or unit.player != local_player():
+			var mine = unit != null and (unit.player == local_player() or (unit.get("unit_kind") == "building" and Teams.is_ally(unit.player, local_player())))
+			if not mine:
 				if not Input.is_key_pressed(KEY_SHIFT):
 					set_selection([])
 				return
@@ -346,7 +373,9 @@ func _handle_left_click():
 			if house != null:
 				_match.hud.show_bubbles(house)
 			elif unit.get("unit_kind") == "building":
-				_match.hud.show_building(unit)
+				set_selection([], unit)
+				if not unit.is_constructed():
+					_match.hud.show_building(unit)  # the cancel-construction panel
 
 
 func _on_minimap_move(point):
@@ -470,9 +499,11 @@ func squad_of(unit) -> int:
 	return 0
 
 
-func set_selection(ids: Array):
+func set_selection(ids: Array, building = null):
 	selected_squads = ids
+	selected_building = building if building != null and is_instance_valid(building) else null
 	selected_squad_changed.emit(selected_squad)
+	selection_changed.emit()
 
 
 func select_squad(squad_id, add = false):
@@ -482,6 +513,100 @@ func select_squad(squad_id, add = false):
 	else:
 		sel.append(squad_id)
 	set_selection(sel)
+
+
+func narrow_to(squad_id):
+	"""Selection panel: click a portrait to keep only that horde."""
+	set_selection([squad_id])
+
+
+func remove_squad(squad_id):
+	"""Selection panel: Shift-click a portrait to drop it from the selection."""
+	var sel = selected_squads.duplicate()
+	sel.erase(squad_id)
+	set_selection(sel)
+
+
+# --- control groups (Ctrl+n sets, n recalls, double-tap centres the camera) -----------------------------------
+func set_control_group(n: int):
+	if selected_squads.is_empty() and selected_building == null:
+		groups.erase(n)
+		return
+	groups[n] = {"squads": selected_squads.duplicate(), "building": selected_building.net_id if selected_building != null else 0}
+	_match.toast.emit("Group %d: %d horde%s%s" % [n, selected_squads.size(), "" if selected_squads.size() == 1 else "s", " + building" if selected_building != null else ""])
+
+
+func recall_control_group(n: int) -> bool:
+	"""Select a stored group; true when this was a double-tap (the camera went to it)."""
+	var g = groups.get(n)
+	if g == null:
+		return false
+	var alive_ids = my_squads().map(func(s): return s.id)
+	var ids = g.squads.filter(func(id): return id in alive_ids)
+	var b = _match.by_net_id(g.building) if g.building != 0 else null
+	if b != null and not b.is_alive():
+		b = null
+	g.squads = ids  # forget the dead
+	var now = Time.get_ticks_msec()
+	var again = now - _group_tap.get(n, -10000) < 450
+	_group_tap[n] = now
+	set_selection(ids, b)
+	if again:
+		var p = group_center(ids, b)
+		if p != null and _camera != null:
+			_camera.set_position_safely(p)
+			camera_locked = false
+			return true
+	return false
+
+
+func group_center(ids: Array, b = null):
+	var sum = Vector3.ZERO
+	var n = 0
+	for s in my_squads():
+		if s.id in ids:
+			sum += Vector3(s.x, 0, s.z)
+			n += 1
+	if n == 0:
+		return b.global_position if b != null else null
+	return sum / n
+
+
+func _cycle_formation():
+	if not _ensure_squad():
+		return
+	var s = _squad_summary(selected_squad)
+	if s.is_empty():
+		return
+	var forms = Formations.available_for(s.cclass, s.spear)
+	var ups = local_player().upgrades
+	var i = forms.find(s.formation)
+	for step in range(1, forms.size() + 1):
+		var key = forms[(i + step) % forms.size()]
+		var need = GameData.FORMATIONS[key].get("needs", "")
+		if need == "" or ups.get(need, false):
+			_squad_cmd("squad_formation", {"formation": key})
+			_match.toast.emit("Formation: %s" % GameData.FORMATIONS[key].name)
+			return
+
+
+func _cycle_stance():
+	if not _ensure_squad():
+		return
+	var s = _squad_summary(selected_squad)
+	if s.is_empty():
+		return
+	var key = GameData.STANCE_ORDER[(GameData.STANCE_ORDER.find(s.stance) + 1) % GameData.STANCE_ORDER.size()]
+	_squad_cmd("squad_stance", {"stance": key})
+	_match.toast.emit("Stance: %s" % GameData.STANCES[key].name)
+
+
+func _squad_cmd(type: String, extra: Dictionary):
+	if not _ensure_squad():
+		return
+	var cmd = {"type": type, "squads": selected_squads.duplicate()}
+	cmd.merge(extra)
+	_submit(cmd)
 
 
 func _box_select(rect: Rect2, add: bool):

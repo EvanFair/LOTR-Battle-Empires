@@ -555,7 +555,7 @@ const UNIT_OVERRIDES = {
 			"ranged": false, "siege": true, "squad_size": 1, "counter_as": "heavy",
 			"armor": 0.35, "radius": 1.6},
 		"special": {"hp": 650, "damage": 42, "interval": 2.2, "range": 2.2, "speed": 2.0,
-			"ranged": false, "squad_size": 2, "counter_as": "heavy", "armor": 0.15},
+			"ranged": false, "squad_size": 2, "counter_as": "heavy", "armor": 0.15, "crusher": true},
 	},
 	"isengard":
 	{
@@ -567,6 +567,51 @@ const UNIT_OVERRIDES = {
 			"counter_as": "heavy"},
 	},
 }
+
+# --- hordes: formations, stances, ranks (plan C1-C4) ---------------------------------------------
+# "classes": counter classes (Troop.unit_class) that may use it. "spear": only factions in SPEAR_UNITS.
+# armour: extra damage reduction fraction, speed: move speed multiplier, damage: damage multiplier,
+# first_hit: damage multiplier on the first blow against a fresh target (Wedge), aoe_taken: multiplier
+# on AoE damage taken, vs_buildings: +fraction damage to buildings, trample: knocks infantry back,
+# pike: immune to trample and stops charges, needs: Blacksmith upgrade required.
+# layout: line (ranks of a few), block (tight square), wedge (triangle). spacing in metres.
+const FORMATIONS = {
+	"line": {"name": "Line", "desc": "Two loose ranks. No bonus, no penalty.", "layout": "line", "spacing": 1.3,
+		"classes": ["infantry", "archer", "rider", "heavy", "special"]},
+	"shield_wall": {"name": "Shield Wall", "desc": "+25% armour, -30% speed.", "layout": "block", "spacing": 0.95,
+		"armour": 0.25, "speed": 0.7, "classes": ["infantry"]},
+	"wedge": {"name": "Wedge", "desc": "+50% damage on the first blow against a target.", "layout": "wedge",
+		"spacing": 1.2, "first_hit": 1.5, "classes": ["infantry"]},
+	"pike_wall": {"name": "Pike Wall", "desc": "+10% armour, -35% speed. Immune to trampling; stops cavalry charges (riders are stunned 1 s).",
+		"layout": "line", "spacing": 0.95, "armour": 0.1, "speed": 0.65, "pike": true, "spear": true, "classes": ["infantry"]},
+	"spread": {"name": "Spread", "desc": "Archers stand wide: 50% less area damage taken.", "layout": "line",
+		"spacing": 2.3, "aoe_taken": 0.5, "classes": ["archer"]},
+	"fire_arrows": {"name": "Fire Arrows", "desc": "+60% damage to buildings, -10% speed. Needs Forged Blades.", "layout": "line",
+		"spacing": 1.5, "vs_buildings": 0.6, "speed": 0.9, "needs": "forged_blades", "classes": ["archer"]},
+	"charge": {"name": "Charge", "desc": "Trample: infantry in the way are knocked back and stunned 0.5 s. Charging into a pike wall stuns the riders 1 s.",
+		"layout": "wedge", "spacing": 1.7, "trample": true, "classes": ["rider"]},
+}
+const FORMATION_ORDER = ["line", "shield_wall", "wedge", "pike_wall", "spread", "fire_arrows", "charge"]
+const SPEAR_UNITS = {"rohan": ["infantry"], "isengard": ["infantry"]}  # factions whose infantry carry spears
+
+const STANCES = {
+	"aggressive": {"name": "Aggressive", "desc": "Chase enemies that come into sight."},
+	"defensive": {"name": "Defensive", "desc": "Fight near this spot, then return to it.", "radius": 7.0},
+	"hold": {"name": "Hold Ground", "desc": "Never move to attack. +15% armour.", "armour": 0.15},
+}
+const STANCE_ORDER = ["aggressive", "defensive", "hold"]
+
+# xp needed for each rank (index 0 = rank 1). Rank 2: banner carrier and +10% HP; rank 3: +15% damage.
+const RANK_XP = [0, 100, 300]
+const RANK_HP = [0.0, 0.10, 0.10]
+const RANK_DAMAGE = [0.0, 0.0, 0.15]
+const HERO_XP_SHARE = 0.5  # a horde earns this fraction of the XP of kills by its owner's hero nearby
+const REINFORCE_INTERVAL = 3.0  # seconds per replacement soldier
+const REINFORCE_COST_FACTOR = 1.0  # of (squad cost / squad size) per soldier
+const CITY_RADIUS = 24.0  # a horde this close to a Town Center counts as standing in its city
+const CHARGE_STUN = 0.5
+const PIKE_STUN = 1.0
+const KNOCKBACK = 1.4
 
 # Blacksmith research. Applies to squadrons trained after it finishes.
 const UPGRADES = {

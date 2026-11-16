@@ -8,6 +8,7 @@ extends CanvasLayer
 
 const HudTheme = preload("res://source/lotr/hud/widgets/HudTheme.gd")
 const ChampionPanel = preload("res://source/lotr/hud/widgets/ChampionPanel.gd")
+const SelectionPanel = preload("res://source/lotr/hud/widgets/SelectionPanel.gd")  # M5 hook
 const OverheadBars = preload("res://source/lotr/hud/widgets/OverheadBars.gd")
 const DamageNumbers = preload("res://source/lotr/hud/widgets/DamageNumbers.gd")
 const Tooltips = preload("res://source/lotr/hud/widgets/Tooltips.gd")
@@ -23,8 +24,8 @@ const ASSIGN_LABELS = {
 }
 const TOAST_TIME = 4.0
 const SQUAD_ORDER_BUTTONS = [
-	["G Follow me", "follow"], ["1 Attack", "squad_attack"], ["2 Move", "squad_defend"],
-	["3 Hold", "hold"], ["4 Return", "return"],
+	["G Follow me", "follow"], ["T Attack", "squad_attack"], ["X Move", "squad_defend"],
+	["N Hold", "hold"], ["J Return", "return"],
 ]
 
 var _match = null
@@ -63,6 +64,7 @@ var _toasts = null
 var _end_screen = null
 var _start_time = 0.0
 var _military_rows = {}
+var _selection_panel = null  # M5 hook
 
 
 func _ready():
@@ -86,6 +88,11 @@ func _ready():
 		_build_bubbles()
 		_build_info_panel()
 		_build_mode_label()
+		# --- M5 HOOK (armies agent): selection panel + horde bubbles, bottom-centre above the hero panel.
+		# SelectionPanel watches the HeroController's selection itself and hides when nothing is selected.
+		_selection_panel = SelectionPanel.new()
+		_selection_panel.attach(_root, _match, self)
+		# --- end M5 HOOK
 	_match.toast.connect(show_toast)
 	await get_tree().process_frame
 	if _match.hero_controller != null:

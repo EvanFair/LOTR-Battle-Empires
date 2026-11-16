@@ -17,7 +17,9 @@ const TICK = 0.4
 const WAYPOINT_REACHED = 5.0
 const HOME_REACHED = 7.0
 const REGEN_PER_TICK = 0.04  # fraction of max HP healed per tick while home
-const SPACING = 1.3
+const LAG_MAX = 4.0  # the banner waits while the soldiers trail this far behind their slots
+const LEAD = 3.0  # soldiers aim this far ahead of their slot while marching (smooth walking)
+const REORDER = 1.4  # a soldier is re-ordered when its slot target moved this far
 
 var squad_id = 0
 var player = null
@@ -30,6 +32,23 @@ var waypoint = 0
 var target_unit = null
 var defend_point = Vector3.ZERO
 var home_point = Vector3.ZERO
+
+var formation = "line"
+var stance = "aggressive"
+var xp = 0
+var rank = 1
+var max_size = 0  # full strength (reinforcements refill up to this)
+var banner_unit = null
+var anchor = Vector3.ZERO  # where the banner stands: the formation slots hang off it
+var facing = Vector3(0, 0, -1)
+var guard_point = Vector3.ZERO  # Defensive stance: the spot this horde holds
+var reinforceable = false  # only hordes trained at a building can be topped up
+var auto_reinforce = true  # refill by itself when idle in the city (toggle)
+var reinforce_now = false  # one-off request from the Reinforce button
+var _reinforce_left = 0.0
+var reinforce_spent = 0  # Supplies spent on replacements so far
+var _anchored = false
+var _engaged = false
 
 var _tick_left = 0.0
 var _last_dest = null
@@ -44,10 +63,37 @@ func setup(a_player, a_class, units: Array, home: Vector3):
 	unit_class = a_class
 	members = units
 	home_point = home
+	max_size = members.size()
 	for m in members:
-		m.squad = self
+		_adopt(m)
 	if not members.is_empty():
 		display_name = members[0].display_name
+	guard_point = center()
+	anchor = guard_point
+
+
+func faction() -> String:
+	return player.faction if player != null else ""
+
+
+func first_member():
+	for m in members:
+		if is_instance_valid(m):
+			return m
+	return null
+
+
+func _adopt(m):
+	m.squad = self
+	m.aggro_range = Formations.aggro_for(m)
+	m.trample_mode = _trample_for(m)
+	m.mark_stats_dirty()
+
+
+func _trample_for(m) -> String:
+	if Formations.def(formation).get("trample", false):
+		return "charge"
+	return "crush" if m.base_stats.get("crusher", false) else ""
 
 
 func alive_members():
@@ -74,8 +120,136 @@ func hp_fraction() -> float:
 	return 0.0 if hp_max == 0 else float(hp) / hp_max
 
 
+func hp_sum() -> int:
+	var hp = 0
+	for m in alive_members():
+		hp += m.hp
+	return hp
+
+
+func hp_max_sum() -> int:
+	var hp = 0
+	for m in alive_members():
+		hp += m.hp_max
+	return hp
+
+
 func state_name():
 	return STATE_NAMES[state]
+
+
+# --- formation, stance, rank ---------------------------------------------------------------------------
+func set_formation(key: String) -> String:
+	"""'' on success, else the reason it was refused."""
+	var why = Formations.refusal(self, key)
+	if why != "":
+		return why
+	if key == formation:
+		return ""
+	formation = key
+	_refresh_members()
+	_last_dest = null
+	return ""
+
+
+func set_stance(key: String) -> String:
+	if not GameData.STANCES.has(key):
+		return "Unknown stance"
+	stance = key
+	guard_point = center()
+	_refresh_members()
+	return ""
+
+
+func _refresh_members():
+	for m in alive_members():
+		m.aggro_range = Formations.aggro_for(m)
+		m.trample_mode = _trample_for(m)
+		m.mark_stats_dirty()
+
+
+func add_xp(amount: int):
+	xp += amount
+	var r = Formations.rank_for_xp(xp)
+	if r == rank:
+		return
+	rank = r
+	_refresh_members()
+	var match_node = get_tree().get_first_node_in_group("lotr_match") if is_inside_tree() else null
+	if match_node != null and player != null and match_node.has_method("toast_player"):
+		match_node.toast_player(player.slot_index, "%s reached rank %d" % [display_name, rank])
+
+
+func xp_next() -> int:
+	return GameData.RANK_XP[rank] if rank < GameData.RANK_XP.size() else xp
+
+
+func _ensure_banner(alive):
+	var want = rank >= 2
+	if not want:
+		if banner_unit != null:
+			for m in alive:
+				m.set_banner(false)
+			banner_unit = null
+		return
+	if banner_unit == null or not is_instance_valid(banner_unit) or not banner_unit.is_alive() or not banner_unit in alive:
+		var idx = Formations.banner_slot(Formations.def(formation).layout, alive.size())
+		banner_unit = alive[mini(idx, alive.size() - 1)]
+		for m in alive:
+			m.set_banner(m == banner_unit)
+
+
+# --- reinforcements -----------------------------------------------------------------------------------------
+func in_city(c: Vector3) -> bool:
+	if player == null:
+		return false
+	for tc in player.town_centers():
+		if tc.global_position.distance_to(c) <= GameData.CITY_RADIUS:
+			return true
+	return false
+
+
+func soldier_cost() -> Dictionary:
+	var st = GameData.troop_stats(player.faction, unit_class, player.upgrades)
+	var out = {}
+	for r in st.cost:
+		out[r] = int(ceil(st.cost[r] * GameData.REINFORCE_COST_FACTOR / maxf(1.0, st.squad_size)))
+	return out
+
+
+func missing() -> int:
+	return maxi(0, max_size - alive_members().size())
+
+
+func _reinforce_tick(alive, c):
+	if not reinforceable or alive.size() >= max_size or alive.is_empty():
+		reinforce_now = false
+		return
+	var calm = state in [State.IDLE, State.HOLD, State.DEFEND, State.RETURN] and not _engaged
+	if not (reinforce_now or (auto_reinforce and calm)) or not in_city(c):
+		return
+	_reinforce_left -= TICK
+	if _reinforce_left > 0.0:
+		return
+	var cost = soldier_cost()
+	if not player.has_resources(cost):
+		return
+	var match_node = get_tree().get_first_node_in_group("lotr_match")
+	if match_node == null:
+		return
+	player.subtract_resources(cost)
+	reinforce_spent += GameData.price(cost)
+	var params = alive[0].spawn_params.duplicate(true)
+	params["upgrades"] = player.upgrades.duplicate()
+	var side = Vector3(-facing.z, 0, facing.x)
+	var spot = c - facing * 1.5 + side * randf_range(-1.5, 1.5)
+	var unit = match_node.spawn_unit(params, spot, player)
+	members.append(unit)
+	_adopt(unit)
+	unit.set_banner(false)
+	_reinforce_left = GameData.REINFORCE_INTERVAL
+	if alive.size() + 1 >= max_size:
+		reinforce_now = false
 
 
 # --- orders -----------------------------------------------------------------------------------
@@ -94,6 +268,7 @@ func order_attack(target):
 
 func order_defend(point: Vector3):
 	defend_point = point
+	guard_point = point
 	state = State.DEFEND
 	_last_dest = null
 
@@ -139,23 +314,40 @@ func _physics_process(delta):
 	_tick()
 
 
+func _holding() -> bool:
+	"""Hold position: the Hold order, or the Hold Ground stance while standing around."""
+	return state == State.HOLD or (stance == "hold" and (state == State.IDLE or state == State.DEFEND))
+
+
 func _tick():
 	var alive = alive_members()
 	if alive.is_empty():
 		queue_free()
 		return
 	var c = center()
+	if not _anchored:
+		_anchored = true
+		anchor = c
+		guard_point = c
+	_ensure_banner(alive)
+	_reinforce_tick(alive, c)
+	alive = members
 	if state == State.RETURN:
 		_tick_return(c)
 		return
 	if state == State.FOLLOW:
 		_tick_follow(alive, c)
 		return
+	if stance == "defensive" and state == State.IDLE:
+		state = State.DEFEND  # a Defensive horde guards its spot
+		defend_point = guard_point
 	var engage_from = c
 	if state == State.DEFEND:
 		engage_from = defend_point
 	var reach = GameData.SQUAD_AGGRO_RANGE
-	if state == State.HOLD:
+	if stance == "defensive":
+		reach = GameData.STANCES.defensive.radius
+	if _holding():
 		reach = alive[0].attack_range + 1.0
 	var enemy = _closest_enemy_near(alive, engage_from, reach)
 	if enemy != null and alive[0].get("siege") != true:
@@ -166,8 +358,16 @@ func _tick():
 	if state == State.ATTACK and _valid_target():
 		enemy = target_unit
 	if enemy != null:
+		var to_enemy = enemy.global_position - c
+		to_enemy.y = 0.0
+		if to_enemy.length() > 0.5:
+			facing = to_enemy.normalized()
 		_engage(alive, enemy)
 		return
+	if _engaged:
+		_engaged = false  # the fight is over: close up around where we stand
+		anchor = c
+		_last_dest = null
 	match state:
 		State.MARCH:
 			if waypoint < lane_points.size():
@@ -178,13 +378,19 @@ func _tick():
 					_move_formation(alive, lane_points[waypoint], c)
 			else:
 				state = State.IDLE
+				guard_point = c
 		State.ATTACK:
 			state = State.IDLE  # target gone
+			guard_point = c
 		State.DEFEND:
-			if c.distance_to(defend_point) > 3.0:
+			if c.distance_to(defend_point) > 3.0 or anchor.distance_to(defend_point) > 0.6:
 				_move_formation(alive, defend_point, c)
-		State.HOLD, State.IDLE:
+			else:
+				_regroup(alive)
+		State.HOLD:
 			pass
+		State.IDLE:
+			_regroup(alive)
 
 
 func _tick_follow(alive, c):
@@ -204,11 +410,16 @@ func _tick_follow(alive, c):
 		_engage(alive, focus)
 		return
 	# otherwise trail the hero in formation
+	if _engaged:
+		_engaged = false
+		anchor = c
 	var back = -hero.global_transform.basis.z
 	back.y = 0.0
 	var dest = hero.global_position - (back.normalized() if back.length() > 0.1 else Vector3.FORWARD) * FOLLOW_DISTANCE
 	if c.distance_to(dest) > 2.5:
 		_move_formation(alive, dest, c)
+	else:
+		_regroup(alive)
 
 
 func _tick_return(c):
@@ -253,10 +464,11 @@ func _closest_enemy_near(alive, from, reach):
 
 
 func _engage(alive, focus):
+	_engaged = true
 	_last_dest = null
 	var forced = state == State.ATTACK or state == State.FOLLOW  # the player/hero chose the target
 	for m in alive:
-		if state == State.HOLD:
+		if _holding():
 			continue  # holding units only shoot what's in range (handled by the unit itself)
 		var busy = m.order == m.Order.ATTACK and m.order_target != null and is_instance_valid(m.order_target) and m.order_target.is_alive()
 		var own = null
@@ -275,29 +487,82 @@ func _engage(alive, focus):
 
 
 func _move_formation(alive, dest: Vector3, c: Vector3):
-	var dir = (dest - c)
-	dir.y = 0.0
-	dir = dir.normalized() if dir.length() > 0.1 else Vector3.FORWARD
-	var side = Vector3(-dir.z, 0, dir.x)
-	var cols = maxi(2, int(ceil(sqrt(alive.size()))))
-	var changed = _last_dest == null or _last_dest.distance_to(dest) > 0.5
-	_last_dest = dest
-	for i in range(alive.size()):
+	"""March the banner toward dest and send every soldier to its slot around it. Runs at 2.5 Hz."""
+	if anchor.distance_to(c) > 7.0:
+		anchor = c  # the banner got left behind (a long chase): close up where we are
+	var d = dest - anchor
+	d.y = 0.0
+	var dist = d.length()
+	if dist > 0.4:
+		facing = d / dist
+	var lag = _mean_lag(alive)
+	if dist > 0.05 and lag < LAG_MAX:
+		anchor += facing * minf(dist, _squad_speed(alive) * TICK * 1.05)
+		dist = maxf(0.0, dist - _squad_speed(alive) * TICK * 1.05)
+	_assign_slots(alive, minf(LEAD, dist), false)
+
+
+func _regroup(alive):
+	"""Idle: soldiers that are out of place walk back to their slot (after a fight, after spawning)."""
+	var c = center()
+	if anchor.distance_to(c) > 7.0:
+		anchor = c  # moved some other way (recall, teleport): the banner follows, soldiers do not trek back
+	_assign_slots(alive, 0.0, true)
+
+
+func _squad_speed(alive) -> float:
+	var v = 99.0
+	for m in alive:
+		if m.stats.move_speed > 0.1:
+			v = minf(v, m.stats.move_speed)
+	return 2.5 if v > 90.0 else v
+
+
+func _mean_lag(alive) -> float:
+	var sum = 0.0
+	var n = 0
+	for m in alive:
+		if m.slot_pos != Vector3.ZERO:  # not assigned yet
+			sum += m.global_position.distance_to(m.slot_pos)
+			n += 1
+	return sum / maxf(1.0, n)
+
+
+func _assign_slots(alive, lead: float, only_idle: bool):
+	var f = Formations.def(formation)
+	var layout = f.layout
+	var spacing = f.spacing
+	var side = Vector3(-facing.z, 0, facing.x)
+	var n = alive.size()
+	for i in range(n):
 		var m = alive[i]
-		var row = i / cols
-		var col = i % cols
-		var slot = dest + side * (col - (cols - 1) / 2.0) * SPACING - dir * row * SPACING
-		if not changed and (m.order == m.Order.MOVE or m.global_position.distance_to(slot) < 1.5):
-			continue
+		var o = Formations.slot_offset(layout, i, n, spacing)
+		var slot = anchor + side * o.x - facing * o.y
+		m.slot_pos = slot
+		if only_idle:
+			if m.order != m.Order.IDLE or m.global_position.distance_to(slot) < 1.2:
+				continue
+		else:
+			slot += facing * lead
+			if m.order == m.Order.MOVE and m.order_position != null and m.order_position.distance_to(slot) < REORDER:
+				continue
+			if m.order != m.Order.MOVE and lead <= 0.0 and m.global_position.distance_to(slot) < 0.8:
+				continue
 		m.order_move(slot)
 
 
 # --- HUD summary ------------------------------------------------------------------------------
 func summary() -> Dictionary:
 	var c = center()
+	var alive = alive_members()
 	return {
 		"id": squad_id, "player": player.slot_index, "class": unit_class,
-		"name": display_name, "count": alive_members().size(), "state": state,
+		"name": display_name, "count": alive.size(), "state": state,
 		"hp": hp_fraction(), "x": c.x, "z": c.z,
-		"members": alive_members().map(func(m): return m.net_id),
+		"members": alive.map(func(m): return m.net_id),
+		"max": max_size, "hp_sum": hp_sum(), "hp_max": hp_max_sum(), "rank": rank, "xp": xp, "xp_next": xp_next(),
+		"formation": formation, "stance": stance,
+		"banner": banner_unit.net_id if banner_unit != null and is_instance_valid(banner_unit) else 0,
+		"auto": auto_reinforce, "can_reinforce": reinforceable, "in_city": in_city(c),
+		"faction": faction(), "cclass": Formations.counter_class(self), "spear": Formations.is_spear(self),
 	}

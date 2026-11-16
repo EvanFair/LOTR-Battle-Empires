@@ -490,6 +490,7 @@ func spawn_squadron(p, unit_class: String, building, lane_index: int, follow_her
 			)
 		)
 	var squad = make_squadron(p, unit_class, units, building.global_position)
+	squad.reinforceable = true
 	if follow_hero and p.hero != null and is_instance_valid(p.hero):
 		squad.order_follow()  # March of Giants: your soldiers rally to you
 		return squad
@@ -648,6 +649,9 @@ func _register_commands():
 	CommandBus.register("use_item", _cmd_use_item)
 	CommandBus.register("cast", _cmd_cast)
 	CommandBus.register("squad_order", _cmd_squad_order)
+	CommandBus.register("squad_formation", _cmd_squad_formation)
+	CommandBus.register("squad_stance", _cmd_squad_stance)
+	CommandBus.register("squad_reinforce", _cmd_squad_reinforce)
 	CommandBus.register("assign_villagers", _cmd_assign_villagers)
 	CommandBus.register("build", _cmd_build)
 	CommandBus.register("build_wall", _cmd_build_wall)
@@ -810,6 +814,70 @@ func _cmd_squad_order(cmd):
 				if not path.is_empty():
 					squad.order_lane(path)
 	return ""
+
+
+func _owned_squads(cmd) -> Array:
+	var p = player_for_slot(cmd.player)
+	var out = []
+	if p == null or p.defeated:
+		return out
+	for id in cmd.get("squads", [cmd.get("squad", 0)]):
+		var squad = squad_by_id(id)
+		if squad != null and squad.player == p:
+			out.append(squad)
+	return out
+
+
+func _cmd_squad_formation(cmd):
+	"""cmd: squads [ids], formation key. Hordes that cannot use it keep theirs (reason returned)."""
+	var squads = _owned_squads(cmd)
+	if squads.is_empty():
+		return "Those squadrons are gone"
+	var err = ""
+	var applied = 0
+	for squad in squads:
+		var why = squad.set_formation(cmd.get("formation", "line"))
+		if why == "":
+			applied += 1
+		else:
+			err = why
+	return "" if applied > 0 else err
+
+
+func _cmd_squad_stance(cmd):
+	var squads = _owned_squads(cmd)
+	if squads.is_empty():
+		return "Those squadrons are gone"
+	var err = ""
+	for squad in squads:
+		var why = squad.set_stance(cmd.get("stance", "aggressive"))
+		if why != "":
+			err = why
+	return err
+
+
+func _cmd_squad_reinforce(cmd):
+	"""cmd: squads [ids], mode "now" (refill while in the city) or "toggle" (auto-refill on/off)."""
+	var squads = _owned_squads(cmd)
+	if squads.is_empty():
+		return "Those squadrons are gone"
+	var err = ""
+	for squad in squads:
+		if not squad.reinforceable:
+			err = "%s cannot be reinforced" % squad.display_name
+			continue
+		if cmd.get("mode", "now") == "toggle":
+			squad.auto_reinforce = cmd.get("enabled", not squad.auto_reinforce)
+		else:
+			if squad.missing() == 0:
+				err = "%s is at full strength" % squad.display_name
+			elif not squad.in_city(squad.center()):
+				err = "Bring %s back to your city to reinforce" % squad.display_name
+			else:
+				squad.reinforce_now = true
+				if not squad.player.has_resources(squad.soldier_cost()):
+					err = squad.player.missing_text(squad.soldier_cost())
+	return err
 
 
 func _cmd_assign_villagers(cmd):

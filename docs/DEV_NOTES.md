@@ -17,8 +17,9 @@
 | `source/lotr/combat/` | v4 plan A1-A5. `Stats.gd` (layers, armour maths), `Status.gd` (flags), `Buff.gd` + `BuffSlot.gd` + `BuffManager.gd` (add types, crowd-control rules, shields), `DamageCtx.gd`, and one script per reusable buff in `buffs/`. Every unit has `unit.stats`, `unit.status`, `unit.bm`. Apply a buff: `target.bm.add(StunBuff.new(1.2), source)`; read a stat: `unit.stats.armour`; check state: `unit.status.can_cast`. The old fields (`armor`, `speed_mult`, `stunned_until`, `buffs`, `apply_buff`) are read-only shims. Tests: `tests/auto/CombatTest.tscn`. |
 | `source/lotr/HeroAbilities.gd` | Ability kinds (strike, nova, skillshot, ...). Replaced by Spell scripts in M2. |
 | `source/lotr/units/` | `LotrUnit.gd` (base: hp, buffs, attacks, stun/root), `Hero.gd`, `Troop.gd`, `Villager.gd`, `Creature.gd`, `Building.gd`, `UnitFactory.gd` (builds nodes/models). |
-| `source/lotr/Squadron.gd` | Squads: orders, follow, march. |
+| `source/lotr/Squadron.gd` | Squads (hordes): orders, follow, march, formation slots around a banner anchor, stance, XP/rank, reinforce. `source/lotr/Formations.gd` holds the horde rules (tables in `GameData.FORMATIONS/STANCES/RANK_*`); `Formations.contribute` is the single place that turns formation/stance/rank into Stats. Commands: `squad_formation`, `squad_stance`, `squad_reinforce`. Test: `tests/auto/ArmyTest.tscn`. |
 | `source/lotr/HeroController.gd` | Local input: keys, selection box, casting, placement. |
+| `source/lotr/hud/widgets/SelectionPanel.gd` | Selection panel (horde / several hordes / building) + `HordeBubbles.gd`; self-driving, attached by one hook block in LotrHud. |
 | `source/lotr/hud/LotrHud.gd` | The whole in-match HUD (code-built Controls). `Indicators.gd` holds ground rings and aim shapes. |
 | `source/lotr/net/Replicator.gd` | LAN: host-authoritative snapshots. The fast packet is a PackedByteArray of 12 bytes per unit; the slow state is a dict at 2 Hz. |
 | `source/lotr/BotBrain.gd` | Bots plus the team Steward. |

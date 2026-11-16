@@ -72,6 +72,7 @@ func _think():
 		_steward(tc)
 	if not player.is_bot:
 		return
+	_formations()
 	var hero = _hero()
 	if hero == null or not hero.is_alive():
 		return
@@ -87,6 +88,46 @@ func _think():
 		return
 	if _elapsed > PUSH_AFTER:
 		_push(hero, tc)
+
+
+# --- hordes: formations (M5) --------------------------------------------------------------------------
+var _form_left = 0.0
+
+
+func _formations():
+	"""Bots pick formations for their hordes: pike wall when cavalry is near, charge for riders that
+	have infantry or archers to run down, fire arrows at buildings, otherwise the plain line."""
+	_form_left -= THINK_INTERVAL
+	if _form_left > 0.0:
+		return
+	_form_left = 2.0
+	for s in get_tree().get_nodes_in_group("squadrons"):
+		if s.player != player or s.state == s.State.RETURN:
+			continue
+		var c = s.center()
+		var riders = 0
+		var foot = 0
+		var buildings = 0
+		for e in Combat.enemies_in_radius(player, c, 18.0, get_tree()):
+			if e.unit_kind == "building":
+				buildings += 1
+			elif e.unit_kind == "troop" and e.target_kind == "rider":
+				riders += 1
+			elif e.unit_kind in ["troop", "villager"]:
+				foot += 1
+		var want = "line"
+		match Formations.counter_class(s):
+			"infantry":
+				if riders > 0 and "pike_wall" in Formations.available(s):
+					want = "pike_wall"
+			"rider":
+				if foot > 0 and "charge" in Formations.available(s):
+					want = "charge"
+			"archer":
+				if buildings > 0 and foot == 0 and player.upgrades.get("forged_blades", false):
+					want = "fire_arrows"
+		if want != s.formation and Formations.refusal(s, want) == "":
+			_cmd({"type": "squad_formation", "squads": [s.squad_id], "formation": want})
 
 
 func _steward(tc):
