@@ -91,15 +91,15 @@ static func make(title: String, right: String, body: String, width = 340.0, acce
 	rich.add_theme_font_size_override("normal_font_size", int(16 * k))
 	rich.add_theme_font_size_override("bold_font_size", int(16 * k))
 	rich.add_theme_font_size_override("italics_font_size", int(16 * k))
-	rich.fit_content = false
+	rich.fit_content = true
 	rich.add_theme_color_override("default_color", Color("d8d0c0"))
 	rich.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	rich.add_theme_constant_override("outline_size", 2)
 	rich.text = body
-	# measure the wrapped height up front: fit_content cannot know the width yet
-	rich.size = Vector2(width, 40)
-	rich.custom_minimum_size = Vector2(width, ceilf(rich.get_content_height()) + 2.0)
+	rich.custom_minimum_size = Vector2(width, 20)
 	box.add_child(rich)
+	rich.minimum_size_changed.connect(panel.set_deferred.bind("size", Vector2.ZERO))
+	panel.resized.connect(panel.set_deferred.bind("size", Vector2.ZERO), CONNECT_ONE_SHOT)
 	return panel
 
 
