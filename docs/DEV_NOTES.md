@@ -2,7 +2,8 @@
 
 ## Project
 - **What:** LOTR Battle Empires, a Godot **4.3** (GDScript only) LOTR MOBA+RTS hybrid: 3v3, one shared city per team, one "Supplies" currency, heroes with QWER abilities, squads, villagers.
-- **Repo:** /home/user/lotr-battle-empires. Commits go to `main`. The overseer commits, so agents do NOT commit or push.
+- **Repo:** your current working directory is a git worktree of the repo on its own branch. Work ONLY there (relative paths). Commit to your branch as you go (`git add -A && git commit`); never push, never switch branch, never touch other worktrees. The overseer merges branches into `dev`, then `main`.
+- **First step in a fresh worktree:** `$G --headless --path . --import` twice (the `.godot` cache is not in git; the first pass prints errors).
 - **Docs:** docs/BUILD_PLAN_v4.txt (the current plan, milestones M0–M11), docs/DESIGN_v3.txt, docs/CONTROLS.md.
 - **Base project:** lampe-games/godot-open-rts under source/match (navigation, fog of war, minimap, camera). Our code is in source/lotr.
 
